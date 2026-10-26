@@ -6,6 +6,8 @@ import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { PetBrain } from './brain'
 import { charactersRoot, loadCharacter } from './character'
 import { ConfigStore } from './config'
+import { createAppMemory } from './memory'
+import { registerMemoryIpc } from './memory-ipc'
 import { createPetWindow, petRendererUrl, registerPetIpc } from './pet-window'
 import { createTray } from './tray'
 
@@ -98,6 +100,9 @@ app
     }
 
     ipcMain.handle(IpcChannel.petGetCharacter, () => character)
+
+    const memory = createAppMemory()
+    registerMemoryIpc(memory, () => settingsWindow)
 
     createTray(petWindow, {
       togglePet: () => {

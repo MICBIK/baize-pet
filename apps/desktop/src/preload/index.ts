@@ -39,6 +39,19 @@ const api = {
       ipcRenderer.removeListener(IpcChannel.petSay, handler)
     }
   },
+  // Setup-page memory management (M3). File dialogs live in the main process.
+  memoryStats: (): Promise<{ semantic: number; episodic: number; procedural: number }> =>
+    ipcRenderer.invoke(IpcChannel.memoryStats),
+  memoryExport: (): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke(IpcChannel.memoryExport),
+  memoryImport: (): Promise<{
+    ok: boolean
+    canceled?: boolean
+    backupPath?: string
+    error?: string
+  }> => ipcRenderer.invoke(IpcChannel.memoryImport),
+  memoryClear: (): Promise<{ ok: boolean; canceled?: boolean }> =>
+    ipcRenderer.invoke(IpcChannel.memoryClear),
 }
 
 export type BaizeApi = typeof api
