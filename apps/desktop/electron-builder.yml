@@ -6,6 +6,11 @@ files:
   - out/**
   - "!**/.DS_Store"
 asar: true
+extraResources:
+  - from: ../../characters
+    to: characters
+  - from: ../../assets
+    to: assets
 mac:
   category: public.app-category.entertainment
   target:
