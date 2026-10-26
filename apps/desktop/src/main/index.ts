@@ -3,7 +3,8 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { IpcChannel } from '@baize/shared'
 import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
-import { loadCharacter } from './character'
+import { PetBrain } from './brain'
+import { charactersRoot, loadCharacter } from './character'
 import { ConfigStore } from './config'
 import { createPetWindow, petRendererUrl, registerPetIpc } from './pet-window'
 import { createTray } from './tray'
@@ -62,9 +63,31 @@ app
 
     const config = ConfigStore.load(app.getPath('userData'))
     const character = loadCharacter(BUILT_IN_PACK_ID)
+    const brain = new PetBrain(join(charactersRoot(), BUILT_IN_PACK_ID))
 
     const petWindow = createPetWindow(config.get().petWindow)
-    registerPetIpc(petWindow, (x, y) => config.set({ petWindow: { x, y } }))
+    registerPetIpc(
+      petWindow,
+      (x, y) => config.set({ petWindow: { x, y } }),
+      () => {
+        const line = brain.onInteraction('drag')
+        if (line) petWindow.webContents.send(IpcChannel.petSay, line)
+      },
+    )
+
+    ipcMain.on(IpcChannel.petClick, () => {
+      const line = brain.onInteraction('click')
+      if (line) petWindow.webContents.send(IpcChannel.petSay, line)
+    })
+
+    // Spontaneous behavior: suppressed while hidden or in do-not-disturb.
+    setInterval(() => {
+      if (!petWindow.isVisible() || config.get().dnd) return
+      const pick = brain.tick()
+      if (!pick) return
+      petWindow.webContents.send(IpcChannel.petAction, pick.action)
+      if (pick.line) petWindow.webContents.send(IpcChannel.petSay, pick.line)
+    }, 60_000)
 
     let settingsWindow: BrowserWindow | null = null
     const openSettings = () => {

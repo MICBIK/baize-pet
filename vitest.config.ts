@@ -15,5 +15,15 @@ export default defineConfig({
   test: {
     include: ['packages/*/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
     passWithNoTests: true,
+    coverage: {
+      provider: 'v8',
+      include: ['packages/core/src/**', 'packages/memory/src/**'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
+    },
   },
 })
