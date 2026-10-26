@@ -25,6 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "mediabunny": "1.62.1",
     "typescript": "^5.9.0",
     "vite": "^8.3.5",

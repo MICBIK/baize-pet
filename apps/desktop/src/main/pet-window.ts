@@ -110,6 +110,7 @@ export function createPetWindow(savedPosition?: { x: number; y: number }): Brows
 export function registerPetIpc(
   win: BrowserWindow,
   persistPosition: (x: number, y: number) => void,
+  onDragEnd?: () => void,
 ): void {
   let dragging = false
   let grabOffset = { x: 0, y: 0 }
@@ -148,6 +149,7 @@ export function registerPetIpc(
     dragging = false
     const bounds = win.getBounds()
     persistPosition(bounds.x, bounds.y)
+    onDragEnd?.()
   })
 }
 

@@ -7,5 +7,24 @@
     "idle": "animations/idle_breath.webm",
     "click": "animations/click.webm",
     "drag": "animations/drag.webm"
+  },
+  "emotion": {
+    "rates": { "happy": 0.08, "bored": 0.04, "angry": 0.01, "miss": 0.02 },
+    "gains": {
+      "click": { "happy": 0.08, "bored": -0.15 },
+      "drag": { "happy": 0.12, "bored": -0.25, "angry": -0.05 },
+      "chat": { "happy": 0.15, "bored": -0.3, "miss": -0.4 }
+    }
+  },
+  "behavior": {
+    "temperature": 1.2,
+    "cooldownMs": 30000,
+    "maxConsecutive": 2,
+    "repeatPenalty": 0.5
+  },
+  "lines": {
+    "click": ["哎哟！", "别戳啦～", "（眯起眼睛）嗯？", "有什么事吗？"],
+    "drag": ["哇——飞起来啦！", "轻一点，会晕的！", "（被拎起来的声音）"],
+    "idle_nap": ["（打了个小盹）", "（伸了个懒腰）"]
   }
 }

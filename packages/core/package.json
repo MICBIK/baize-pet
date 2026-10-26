@@ -13,6 +13,7 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@baize/shared": "workspace:*"
+    "@baize/shared": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

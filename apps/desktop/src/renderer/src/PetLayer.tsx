@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const HIT_ALPHA_THRESHOLD = 32
 const DRAG_THRESHOLD_PX = 5
+const BUBBLE_MS = 4000
 
 function animationUrl(info: CharacterInfo, action: PetActionName): string {
   const file = info.animations[action] ?? info.animations.idle
@@ -23,12 +24,25 @@ export function PetLayer() {
   const dragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 })
   const [character, setCharacter] = useState<CharacterInfo | null>(null)
   const [action, setAction] = useState<PetActionName>('idle')
+  const [bubble, setBubble] = useState<string | null>(null)
+  const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     window.baize
       .getCharacter()
       .then(setCharacter)
       .catch((error: unknown) => console.error('Failed to load character:', error))
+    const offAction = window.baize.onPetAction((spontaneous: string) => setAction(spontaneous))
+    const offSay = window.baize.onSay((line: string) => {
+      setBubble(line)
+      if (bubbleTimer.current) clearTimeout(bubbleTimer.current)
+      bubbleTimer.current = setTimeout(() => setBubble(null), BUBBLE_MS)
+    })
+    return () => {
+      offAction()
+      offSay()
+      if (bubbleTimer.current) clearTimeout(bubbleTimer.current)
+    }
   }, [])
 
   const setInteractive = useCallback((value: boolean) => {
@@ -98,6 +112,7 @@ export function PetLayer() {
     if (!drag.moved) {
       // A click without movement plays the click animation (falls back to idle).
       setAction('click')
+      window.baize.click()
     } else {
       setAction('idle')
     }
@@ -130,6 +145,26 @@ export function PetLayer() {
         onEnded={onEnded}
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
       />
+      {bubble && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 8,
+            transform: 'translateX(-50%)',
+            maxWidth: 220,
+            padding: '6px 10px',
+            borderRadius: 10,
+            background: 'rgba(255, 250, 240, 0.95)',
+            border: '1px solid rgba(0,0,0,0.15)',
+            fontSize: 12,
+            color: '#3a3128',
+            whiteSpace: 'normal',
+          }}
+        >
+          {bubble}
+        </div>
+      )}
     </div>
   )
 }

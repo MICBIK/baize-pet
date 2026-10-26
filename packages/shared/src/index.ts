@@ -13,6 +13,10 @@ export const IpcChannel = {
   petDragEnd: 'pet:drag-end',
   petClick: 'pet:click',
   petGetCharacter: 'pet:get-character',
+  /** Main -> renderer: play an action (spontaneous behavior). */
+  petAction: 'pet:action',
+  /** Main -> renderer: show a speech bubble. */
+  petSay: 'pet:say',
   settingsOpen: 'settings:open',
 } as const
 

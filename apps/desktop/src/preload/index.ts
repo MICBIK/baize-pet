@@ -19,6 +19,26 @@ const api = {
     ipcRenderer.send(IpcChannel.petDragEnd)
   },
   getCharacter: (): Promise<CharacterInfo> => ipcRenderer.invoke(IpcChannel.petGetCharacter),
+  /** Renderer -> main: a click on the pet (no drag movement). */
+  click: (): void => {
+    ipcRenderer.send(IpcChannel.petClick)
+  },
+  /** Main -> renderer: play a spontaneous action. */
+  onPetAction: (callback: (action: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, action: string): void => callback(action)
+    ipcRenderer.on(IpcChannel.petAction, handler)
+    return () => {
+      ipcRenderer.removeListener(IpcChannel.petAction, handler)
+    }
+  },
+  /** Main -> renderer: show a speech bubble line. */
+  onSay: (callback: (line: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, line: string): void => callback(line)
+    ipcRenderer.on(IpcChannel.petSay, handler)
+    return () => {
+      ipcRenderer.removeListener(IpcChannel.petSay, handler)
+    }
+  },
 }
 
 export type BaizeApi = typeof api
