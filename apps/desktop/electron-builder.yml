@@ -6,6 +6,7 @@ files:
   - out/**
   - "!**/.DS_Store"
 asar: true
+afterPack: build/after-pack.cjs
 extraResources:
   - from: ../../characters
     to: characters
