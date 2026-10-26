@@ -58,3 +58,11 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.exe
           if-no-files-found: error
+      # electron-builder's own publish step can be cut short when the job ends
+      # while a large file is still uploading; this re-upload is idempotent.
+      - name: Ensure draft release assets
+        working-directory: apps/desktop
+        shell: bash
+        run: gh release upload "$GITHUB_REF_NAME" release/*.dmg release/*.exe release/*.blockmap release/latest*.yml --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
