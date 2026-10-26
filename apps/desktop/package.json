@@ -1,0 +1,25 @@
+{
+  "name": "@baize/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "BaiZe desktop pet (Electron app)",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:win": "electron-vite build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@baize/shared": "workspace:*",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

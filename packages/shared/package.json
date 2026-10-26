@@ -1,0 +1,15 @@
+{
+  "name": "@baize/shared",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Shared types, constants and zod schemas for BaiZe packages",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  }
+}

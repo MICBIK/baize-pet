@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            args: --mac
+          - os: windows-latest
+            args: --win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm (pinned via packageManager)
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: |
+          pnpm -r --filter '!@baize/desktop' run build
+          pnpm --filter @baize/desktop run build
+      - name: Package and publish draft release
+        run: pnpm --filter @baize/desktop exec electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify ad-hoc signature (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign -dv release/mac-arm64/BaiZe.app 2>&1 || true
+          codesign --verify "release/mac-arm64/BaiZe.app"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: baize-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.exe
+          if-no-files-found: error
