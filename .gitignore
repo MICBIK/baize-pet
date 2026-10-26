@@ -7,8 +7,11 @@ coverage/
 .DS_Store
 .env
 .env.*
+*.local
 *.sqlite
 *.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.mimosa/
+交付报告.md
