@@ -1,0 +1,17 @@
+appId: com.baizepet.desktop
+productName: BaiZe
+directories:
+  output: release
+files:
+  - out/**
+  - "!**/.DS_Store"
+asar: true
+mac:
+  category: public.app-category.entertainment
+  target:
+    - target: dmg
+      arch:
+        - arm64
+win:
+  target:
+    - nsis
