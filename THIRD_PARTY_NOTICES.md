@@ -19,3 +19,5 @@
 | @types/react-dom     | ^19.2.0  | 类型                            | MIT              | 是         | 是       | 保留许可文本 | https://github.com/DefinitelyTyped/DefinitelyTyped    |
 | zod                  | ^4.6.7   | 库                              | MIT              | 是         | 是       | 保留许可文本 | https://github.com/colinhacks/zod                     |
 | mediabunny           | 1.62.1   | 库（占位资产生成工具链，仅构建期） | MIT              | 是         | 是       | 保留许可文本 | https://github.com/Vanilagy/mediabunny                |
+| better-sqlite3       | ^13.0.3  | 库（原生模块）                   | MIT              | 是         | 是       | 保留许可文本 | https://github.com/WiseLibs/better-sqlite3            |
+| @types/better-sqlite3 | ^7.6.13 | 类型                            | MIT              | 是         | 是       | 保留许可文本 | https://github.com/DefinitelyTyped/DefinitelyTyped    |

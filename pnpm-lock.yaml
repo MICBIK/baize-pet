@@ -79,6 +79,13 @@ importers:
       "@baize/shared":
         specifier: workspace:*
         version: link:../shared
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+    devDependencies:
+      "@types/better-sqlite3":
+        specifier: ^7.6.13
+        version: 7.6.13
 
   packages/shared:
     dependencies:
@@ -684,6 +691,12 @@ packages:
         integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==,
       }
 
+  "@types/better-sqlite3@7.6.13":
+    resolution:
+      {
+        integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==,
+      }
+
   "@types/cacheable-request@6.0.3":
     resolution:
       {
@@ -972,6 +985,13 @@ packages:
       }
     engines: { node: ">=6.0.0" }
     hasBin: true
+
+  better-sqlite3@13.0.3:
+    resolution:
+      {
+        integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==,
+      }
+    engines: { node: ">=22" }
 
   bluebird@3.7.2:
     resolution:
@@ -2146,6 +2166,13 @@ packages:
         integrity: sha512-GuvqvtrOk+AC27RidBxBsMzVNkwNl7PjHgc4NXbmdvSVLgIUjpaqcG1FjNRYnt2Yn9Ytq+Ln37XsBaglUcte/w==,
       }
     engines: { node: ">=22.12.0" }
+
+  node-addon-api@8.9.2:
+    resolution:
+      {
+        integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==,
+      }
+    engines: { node: ^18 || ^20 || >= 21 }
 
   node-api-version@0.2.1:
     resolution:
@@ -3360,6 +3387,10 @@ snapshots:
     dependencies:
       "@babel/types": 7.29.11
 
+  "@types/better-sqlite3@7.6.13":
+    dependencies:
+      "@types/node": 22.20.5
+
   "@types/cacheable-request@6.0.3":
     dependencies:
       "@types/http-cache-semantics": 4.2.0
@@ -3559,6 +3590,10 @@ snapshots:
   base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.11.33: {}
+
+  better-sqlite3@13.0.3:
+    dependencies:
+      node-addon-api: 8.9.2
 
   bluebird@3.7.2: {}
 
@@ -4249,6 +4284,8 @@ snapshots:
   node-abi@4.40.0:
     dependencies:
       semver: 7.7.4
+
+  node-addon-api@8.9.2: {}
 
   node-api-version@0.2.1:
     dependencies:
