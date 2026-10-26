@@ -28,6 +28,14 @@ jobs:
         run: corepack enable
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Stamp version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('apps/desktop/package.json','utf8'));p.version=process.env.VERSION;fs.writeFileSync('apps/desktop/package.json',JSON.stringify(p,null,2)+'\n')" "$VERSION"
+          node -e "console.log('building version', JSON.parse(require('fs').readFileSync('apps/desktop/package.json','utf8')).version)"
+        env:
+          VERSION: ${{ github.ref_name }}
       - name: Build packages
         run: |
           pnpm -r --filter '!@baize/desktop' run build
@@ -38,14 +46,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify ad-hoc signature (macOS)
         if: runner.os == 'macOS'
+        working-directory: apps/desktop
         run: |
-          codesign -dv release/mac-arm64/BaiZe.app 2>&1 || true
+          codesign -dv "release/mac-arm64/BaiZe.app" 2>&1
           codesign --verify "release/mac-arm64/BaiZe.app"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: baize-${{ matrix.os }}
           path: |
-            release/*.dmg
-            release/*.exe
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
           if-no-files-found: error

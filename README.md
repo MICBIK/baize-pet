@@ -8,7 +8,32 @@ BaiZe（白泽）是一只住在桌面上的宠物，但不是"会动的贴纸"�
 
 ## 当前状态
 
-**工程骨架搭建阶段**。产品与设计文档已完成两轮评审，正在按 [07-工程骨架方案](docs/07-工程骨架方案.md) 搭建 macOS 优先的 Electron 骨架。文档是本仓库的事实来源（Source of Truth）。
+**工程骨架可运行**（M0-M4 已完成：桌宠窗口 / 行为与情绪 / 记忆引擎 / 对话）。产品与设计文档见下方索引，工程骨架依据 [07-工程骨架方案](docs/07-工程骨架方案.md)，技术决定见 [docs/adr/](docs/adr/)。
+
+## 下载与安装（macOS / Apple Silicon）
+
+1. 从 [Releases](https://github.com/MICBIK/baize-pet/releases) 下载 `BaiZe-<版本>-arm64.dmg`。
+2. 双击打开 dmg，把 **BaiZe** 拖入 `Applications` 文件夹。
+3. **首次打开如何放行**（当前产物为 ad-hoc 签名，未经公证，macOS 会拦截）：
+   - 双击 BaiZe 若提示"无法打开，因为无法验证开发者"：点**取消**，然后右键（或按住 Control 点击）`Applications/BaiZe` → 点**打开** → 在弹窗中再点**打开**。此操作只需一次。
+   - 若提示"已损坏，无法打开"（macOS 15+ 常见）：打开「终端」执行
+     `xattr -dr com.apple.quarantine /Applications/BaiZe.app`，再正常打开即可。
+   - 也可以走系统设置：**系统设置 → 隐私与安全性**，向下找到关于 BaiZe 被拦截的提示，点**仍要打开**。
+4. 首次启动会弹出模型配置向导：选一家模型服务（DeepSeek / GLM / Kimi / MiniMax / Claude / 本地 Ollama）→ 打开官网获取 API key → 粘贴 → 测试连通 → 完成。API key 只经系统钥匙串（safeStorage）加密保存在本机。
+5. 点击桌宠即可开始对话；菜单栏的白泽图标提供显示/隐藏、勿扰、设置与退出。
+
+> 安装包不做静默自动更新（未公证）：新版本请到 Releases 页面重新下载。
+> 截图占位：待补（首次打开拦截弹窗 / 系统设置中的放行入口 / 配置向导界面）。
+
+## 本地开发
+
+```bash
+corepack enable          # 使用仓库锁定的 pnpm 9
+pnpm install
+pnpm dev                 # 启动开发模式（需要 ffmpeg 仅在重新生成占位动画时）
+pnpm build && pnpm build:mac   # 产物在 apps/desktop/release/
+pnpm lint / typecheck / test:coverage
+```
 
 ## 文档索引
 
