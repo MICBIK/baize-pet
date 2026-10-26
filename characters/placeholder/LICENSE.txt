@@ -1,0 +1,10 @@
+BaiZe placeholder character pack
+
+The animation and icon files in this pack are generated programmatically by
+scripts/generate-placeholder-animations.mjs (see characters/placeholder/README.md).
+
+They are placeholder assets distributed under the same license as the repository
+code: AGPL-3.0-only. They will be replaced by officially illustrated assets
+(licensed CC BY-NC-SA 4.0) in a later milestone.
+
+SPDX-License-Identifier: AGPL-3.0-only
