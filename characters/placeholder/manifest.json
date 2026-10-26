@@ -1,0 +1,11 @@
+{
+  "id": "placeholder",
+  "name": "小白泽（占位）",
+  "version": "0.1.0",
+  "description": "Programmatically generated placeholder character for skeleton development.",
+  "animations": {
+    "idle": "animations/idle_breath.webm",
+    "click": "animations/click.webm",
+    "drag": "animations/drag.webm"
+  }
+}
