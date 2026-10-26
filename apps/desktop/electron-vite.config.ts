@@ -45,6 +45,7 @@ export default defineConfig({
         input: {
           index: resolve(appDir, 'src/renderer/index.html'),
           settings: resolve(appDir, 'src/renderer/settings.html'),
+          chat: resolve(appDir, 'src/renderer/chat.html'),
         },
       },
     },

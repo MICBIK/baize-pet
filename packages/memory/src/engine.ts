@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import {
   type ConsolidationReport,
   type DecayState,
   type EpisodicEvent,
-  type EventDraft,
   type EventDraft as EventDraftType,
   type ExportedMemory,
   MEMORY_EXPORT_FORMAT,
@@ -16,8 +16,7 @@ import {
   type RecallQuery,
   type SemanticFact,
 } from '@baize/shared'
-import Database from 'better-sqlite3'
-import { migrate } from './migrations'
+import { migrate, runInTransaction } from './migrations'
 import { WorkingMemory } from './working-memory'
 
 /** Raised when an import file fails format or version validation. */
@@ -56,6 +55,16 @@ interface EpisodicRow {
   pinned: number
 }
 
+interface SemanticFactRow {
+  id: number
+  content: string
+  source: string
+  importance: number
+  created_at: number
+  updated_at: number
+  last_recalled_at: number | null
+}
+
 function parseTags(json: string): string[] {
   try {
     const parsed: unknown = JSON.parse(json)
@@ -82,20 +91,22 @@ function rowToEvent(row: EpisodicRow): EpisodicEvent {
 }
 
 /**
- * SQLite-backed MemoryEngine. All statements use parameter binding. The engine
- * is synchronous internally (better-sqlite3) and exposes the async interface
- * from docs/04 §6 so callers never block on the storage choice.
+ * SQLite-backed MemoryEngine on Node's built-in sqlite (node:sqlite). All
+ * statements use parameter binding. The engine is synchronous internally and
+ * exposes the async interface from docs/04 §6 so callers never block on the
+ * storage choice. Using the runtime-bundled sqlite avoids native-module ABI
+ * rebuilds between Node (tests) and Electron (app).
  */
 export class SqliteMemoryEngine implements MemoryEngine {
-  private readonly db: Database.Database
+  private readonly db: DatabaseSync
   private readonly working = new WorkingMemory()
   private readonly weights: RecallWeights
   private readonly dbPath: string
 
   constructor(dbPath: string, weights: RecallWeights = DEFAULT_RECALL_WEIGHTS) {
     this.dbPath = resolve(dbPath)
-    this.db = new Database(this.dbPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = new DatabaseSync(this.dbPath)
+    this.db.exec('PRAGMA journal_mode = WAL')
     this.weights = weights
     migrate(this.db)
   }
@@ -127,12 +138,35 @@ export class SqliteMemoryEngine implements MemoryEngine {
     source = 'chat',
     importance = 5,
     at = Date.now(),
+    options?: { replaceSameSource?: boolean },
   ): Promise<void> {
-    this.db
-      .prepare(
-        `INSERT INTO semantic_facts (content, source, importance, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(content, source, importance, at, at)
+    runInTransaction(this.db, () => {
+      if (options?.replaceSameSource) {
+        this.db.prepare(`DELETE FROM semantic_facts WHERE source = ?`).run(source)
+      }
+      this.db
+        .prepare(
+          `INSERT INTO semantic_facts (content, source, importance, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(content, source, importance, at, at)
+    })
+  }
+
+  /** Latest semantic fact recorded under a source kind ('user_name', 'preference', …). */
+  async findSemanticBySource(source: string): Promise<SemanticFact | null> {
+    const row = this.db
+      .prepare(`SELECT * FROM semantic_facts WHERE source = ? ORDER BY id DESC LIMIT 1`)
+      .get(source) as SemanticFactRow | undefined
+    if (!row) return null
+    return {
+      id: row.id,
+      content: row.content,
+      source: row.source,
+      importance: row.importance,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastRecalledAt: row.last_recalled_at ?? null,
+    }
   }
 
   /** Records a behavioral habit pattern (procedural memory). */
@@ -147,6 +181,11 @@ export class SqliteMemoryEngine implements MemoryEngine {
   /** Appends a chat turn to the in-RAM working memory window. */
   appendChatTurn(role: 'user' | 'assistant', content: string): void {
     this.working.append(role, content)
+  }
+
+  /** Current working-memory window (recent conversation turns). */
+  workingTurns(): { role: 'user' | 'assistant'; content: string; at: number }[] {
+    return this.working.recent()
   }
 
   // -- Reads ----------------------------------------------------------------
@@ -186,7 +225,7 @@ export class SqliteMemoryEngine implements MemoryEngine {
       ['topic_tags', query.topicTags],
     ] as const) {
       if (tags && tags.length > 0) {
-        conditions.push('(' + tags.map(() => `${column} LIKE ?`).join(' OR ') + ')')
+        conditions.push(`(${tags.map(() => `${column} LIKE ?`).join(' OR ')})`)
         params.push(...tags.map((tag) => `%"${tag}"%`))
         tagGroups.push([...tags])
       }
@@ -196,7 +235,7 @@ export class SqliteMemoryEngine implements MemoryEngine {
     // Over-fetch a bit so scoring can pick the best subset within budget.
     const rows = this.db
       .prepare(`SELECT * FROM episodic_events ${where} ORDER BY created_at DESC LIMIT ?`)
-      .all(...params, Math.max(budget * 5, 50)) as EpisodicRow[]
+      .all(...params, Math.max(budget * 5, 50)) as unknown as EpisodicRow[]
 
     const now = Date.now()
     const scored = rows.map((row) => {
@@ -237,7 +276,7 @@ export class SqliteMemoryEngine implements MemoryEngine {
   async quickContext(): Promise<string> {
     const facts = this.db
       .prepare(`SELECT * FROM semantic_facts ORDER BY importance DESC, updated_at DESC LIMIT 10`)
-      .all() as SemanticFact[]
+      .all() as unknown as SemanticFact[]
     const parts: string[] = []
     if (facts.length > 0) {
       parts.push('关于主人的已知信息：')
@@ -276,7 +315,7 @@ export class SqliteMemoryEngine implements MemoryEngine {
       lastRecalledAt: (row.last_recalled_at as number | null) ?? null,
     }))
     const episodic = (
-      this.db.prepare(`SELECT * FROM episodic_events ORDER BY id`).all() as EpisodicRow[]
+      this.db.prepare(`SELECT * FROM episodic_events ORDER BY id`).all() as unknown as EpisodicRow[]
     ).map((row) => {
       const event = rowToEvent(row)
       return {
@@ -338,7 +377,7 @@ export class SqliteMemoryEngine implements MemoryEngine {
       )
     }
 
-    this.db.transaction(() => {
+    runInTransaction(this.db, () => {
       this.db.prepare(`DELETE FROM semantic_facts`).run()
       this.db.prepare(`DELETE FROM episodic_events`).run()
       this.db.prepare(`DELETE FROM procedural_rules`).run()
@@ -384,16 +423,16 @@ export class SqliteMemoryEngine implements MemoryEngine {
       for (const row of data.tables.procedural) {
         insertProcedural.run(row.id, row.pattern, row.confidence, row.createdAt, row.updatedAt)
       }
-    })()
+    })
   }
 
   /** Clears all memory tables (setup page "清空记忆"); the schema is kept. */
   async clearAll(): Promise<void> {
-    this.db.transaction(() => {
+    runInTransaction(this.db, () => {
       this.db.prepare(`DELETE FROM semantic_facts`).run()
       this.db.prepare(`DELETE FROM episodic_events`).run()
       this.db.prepare(`DELETE FROM procedural_rules`).run()
-    })()
+    })
     this.working.clear()
   }
 

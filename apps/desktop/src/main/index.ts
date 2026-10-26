@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadCharacterPack } from '@baize/core'
+import { presetById } from '@baize/llm'
 import { IpcChannel } from '@baize/shared'
-import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  type BrowserWindowConstructorOptions,
+  ipcMain,
+  net,
+  protocol,
+  shell,
+} from 'electron'
 import { PetBrain } from './brain'
 import { charactersRoot, loadCharacter } from './character'
+import { ChatService, type WizardDraft } from './chat-service'
 import { ConfigStore } from './config'
 import { createAppMemory } from './memory'
 import { registerMemoryIpc } from './memory-ipc'
@@ -33,29 +44,27 @@ function registerCharacterProtocol(): void {
   })
 }
 
-function createSettingsWindow(): BrowserWindow {
-  const settings = new BrowserWindow({
-    width: 420,
-    height: 540,
+function rendererWindowOptions(title: string): BrowserWindowConstructorOptions {
+  return {
     show: false,
     autoHideMenuBar: true,
-    title: 'BaiZe 设置',
+    title,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-  })
-  settings.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  settings.webContents.on('will-navigate', (event) => event.preventDefault())
+  }
+}
+
+function loadRendererPage(win: BrowserWindow, page: string): void {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) {
-    void settings.loadURL(`${devUrl}/settings.html`)
+    void win.loadURL(`${devUrl}/${page}`)
   } else {
-    void settings.loadFile(join(__dirname, '../renderer/settings.html'))
+    void win.loadFile(join(__dirname, '../renderer', page))
   }
-  return settings
 }
 
 app
@@ -65,7 +74,50 @@ app
 
     const config = ConfigStore.load(app.getPath('userData'))
     const character = loadCharacter(BUILT_IN_PACK_ID)
+    const pack = loadCharacterPack(join(charactersRoot(), BUILT_IN_PACK_ID))
     const brain = new PetBrain(join(charactersRoot(), BUILT_IN_PACK_ID))
+
+    let settingsWindow: BrowserWindow | null = null
+    const openSettings = () => {
+      if (!settingsWindow || settingsWindow.isDestroyed()) {
+        settingsWindow = new BrowserWindow({
+          ...rendererWindowOptions('BaiZe 设置'),
+          width: 440,
+          height: 640,
+        })
+        settingsWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        settingsWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+        loadRendererPage(settingsWindow, 'settings.html')
+      }
+      settingsWindow.show()
+    }
+
+    let chatWindow: BrowserWindow | null = null
+    const getChatWindow = () => (chatWindow && !chatWindow.isDestroyed() ? chatWindow : null)
+    const openChat = () => {
+      if (!getChatWindow()) {
+        chatWindow = new BrowserWindow({
+          ...rendererWindowOptions('BaiZe 对话'),
+          width: 320,
+          height: 480,
+        })
+        chatWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        chatWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+        loadRendererPage(chatWindow, 'chat.html')
+      }
+      chatWindow?.show()
+    }
+
+    const memory = createAppMemory()
+    const chat = new ChatService(
+      memory,
+      config,
+      getChatWindow,
+      () => {
+        petWindow.webContents.send(IpcChannel.petSay, '（悄悄把这个名字记在了心里）')
+      },
+      pack.persona,
+    )
 
     const petWindow = createPetWindow(config.get().petWindow)
     registerPetIpc(
@@ -80,6 +132,8 @@ app
     ipcMain.on(IpcChannel.petClick, () => {
       const line = brain.onInteraction('click')
       if (line) petWindow.webContents.send(IpcChannel.petSay, line)
+      // Clicking the pet opens the chat input (docs/07 M4).
+      openChat()
     })
 
     // Spontaneous behavior: suppressed while hidden or in do-not-disturb.
@@ -91,18 +145,33 @@ app
       if (pick.line) petWindow.webContents.send(IpcChannel.petSay, pick.line)
     }, 60_000)
 
-    let settingsWindow: BrowserWindow | null = null
-    const openSettings = () => {
-      if (!settingsWindow || settingsWindow.isDestroyed()) {
-        settingsWindow = createSettingsWindow()
-      }
-      settingsWindow.show()
-    }
-
     ipcMain.handle(IpcChannel.petGetCharacter, () => character)
-
-    const memory = createAppMemory()
     registerMemoryIpc(memory, () => settingsWindow)
+
+    // -- Model wizard & chat (M4) -------------------------------------------
+    ipcMain.handle(IpcChannel.modelGet, () => chat.status())
+    ipcMain.handle(IpcChannel.wizardSave, (_event, draft: WizardDraft) => {
+      try {
+        return chat.saveWizard(draft).then(() => ({ ok: true }))
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    })
+    ipcMain.handle(IpcChannel.wizardTest, (_event, draft: WizardDraft) =>
+      chat.testConnectivity(draft),
+    )
+    ipcMain.handle(IpcChannel.wizardOpenKeyPage, (_event, providerId: string) => {
+      // Whitelist: only URLs from our own preset table are ever opened.
+      const url = presetById(providerId)?.keyUrl
+      if (url) void shell.openExternal(url)
+    })
+    ipcMain.handle(IpcChannel.chatSend, (_event, text: unknown) => {
+      if (typeof text === 'string' && text.trim().length > 0 && text.length <= 2000) {
+        return chat.send(text.trim()).then(() => ({ ok: true }))
+      }
+      return { ok: false, error: '消息为空或过长' }
+    })
+    ipcMain.handle(IpcChannel.chatHistory, () => chat.history())
 
     createTray(petWindow, {
       togglePet: () => {
@@ -123,6 +192,11 @@ app
       void petWindow.loadURL(url)
     } else {
       void petWindow.loadFile(url)
+    }
+
+    // First launch: the model wizard appears automatically (docs/07 M4).
+    if (!config.get().wizardDone) {
+      setTimeout(openSettings, 1200)
     }
   })
   .catch((error: unknown) => {
