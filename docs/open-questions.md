@@ -19,3 +19,17 @@
 
 4. **向量检索（sqlite-vec）本轮未接入**
    - 说明：07 §4 M3 明确"向量检索先留接口，embedding 模型下一轮接入"，因此 `episodic_events.embedding` 列已预留（BLOB，当前恒为 NULL），`recall()` 的 relevance 分量目前由标签命中率充当，公式 α·recency + β·importance + γ·relevance 的结构与权重（默认 0.3/0.4/0.3）已外置。sqlite-vec 依赖留到接入 embedding 时再引入（减少本期 native 依赖面）。
+
+## 2026-10-26（M4）
+
+5. **Anthropic 预设的默认模型名**
+   - 说明：`claude-sonnet-4-5` 为当前写入的默认值，仅供占位；产品侧应确认向导中 Anthropic 档默认推荐哪个模型（以及是否随时间更新），模型名可由用户在向导中覆盖。
+
+6. **"点击宠物或快捷键打开输入框"中快捷键的实现方式**
+   - 说明：本轮实现了"点击宠物打开独立聊天窗口"；"快捷键"未做全局快捷键（`globalShortcut` 会占用系统级组合键，存在与用户已有快捷键冲突的产品判断），保守起见留给下一轮（可做成设置项，默认关闭）。07 原文为"点击宠物**或**快捷键"，单一路径已满足验收。
+
+7. **对话历史仅保留本次会话**
+   - 说明：工作记忆（固定 12 轮）只在内存中，重启后聊天窗口为空（历史对话已按摘要写入情景记忆，可被 recall 检索）。若产品希望重启后聊天窗口显示上一段对话，需要从情景记忆重建视图，留待确认。
+
+8. **renderer 侧 `window.baize` 部分方法类型推断为 any**
+   - 说明：root tsconfig（moduleResolution: bundler）下，`baize.d.ts` 经 `typeof api` 引入的 preload API 中，部分新增方法在 renderer 文件里推断为 any（已用显式参数类型标注绕过，不影响运行时）。待后续统一 renderer/preload 的类型组织方式（如独立 `env.d.ts` 直接引用 shared 类型）。

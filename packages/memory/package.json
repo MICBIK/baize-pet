@@ -13,10 +13,6 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@baize/shared": "workspace:*",
-    "better-sqlite3": "^13.0.3"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@baize/shared": "workspace:*"
   }
 }

@@ -1,7 +1,48 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import type { Database } from 'better-sqlite3'
+import type { DatabaseSync } from 'node:sqlite'
 
-// v1 schema: static DDL, no user data involved (safe to run with db.exec).
+// PRAGMA assignment cannot use bound parameters; we index into a table of
+// constant statements instead of interpolating values at the call site.
+const SET_USER_VERSION = [
+  'PRAGMA user_version = 0',
+  'PRAGMA user_version = 1',
+  'PRAGMA user_version = 2',
+  'PRAGMA user_version = 3',
+  'PRAGMA user_version = 4',
+  'PRAGMA user_version = 5',
+  'PRAGMA user_version = 6',
+  'PRAGMA user_version = 7',
+  'PRAGMA user_version = 8',
+  'PRAGMA user_version = 9',
+  'PRAGMA user_version = 10',
+]
+
+/** Reads PRAGMA user_version via a prepared statement (node:sqlite has no pragma helper). */
+export function userVersion(db: DatabaseSync): number {
+  const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
+  return row?.user_version ?? 0
+}
+
+export function setUserVersion(db: DatabaseSync, version: number): void {
+  const statement = SET_USER_VERSION[version]
+  if (!statement) throw new Error(`Unsupported schema version: ${version}`)
+  db.prepare(statement).run()
+}
+
+/** Minimal transaction helper (node:sqlite has no transaction() wrapper). */
+export function runInTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  db.exec('BEGIN')
+  try {
+    const result = fn()
+    db.exec('COMMIT')
+    return result
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+// v1 schema: static DDL, no user data involved (safe to run through prepare).
 const SCHEMA_V1 = [
   `CREATE TABLE semantic_facts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,16 +84,16 @@ type Migration = { statements: string[] }
 /** Versioned schema migrations; MIGRATIONS[n] upgrades user_version n to n+1. */
 export const MIGRATIONS: Migration[] = [{ statements: SCHEMA_V1 }]
 
-export function migrate(db: Database): void {
-  const current = db.pragma('user_version', { simple: true }) as number
+export function migrate(db: DatabaseSync): void {
+  const current = userVersion(db)
   for (let version = current; version < MIGRATIONS.length; version++) {
     const migration = MIGRATIONS[version]
     if (!migration) break
-    db.transaction(() => {
+    runInTransaction(db, () => {
       for (const statement of migration.statements) {
         db.prepare(statement).run()
       }
-      db.pragma(`user_version = ${version + 1}`)
-    })()
+      setUserVersion(db, version + 1)
+    })
   }
 }

@@ -59,7 +59,7 @@ describe('loadCharacterPack', () => {
     writeFileSync(join(dir, 'persona', 'persona.md'), '# persona')
     const pack = loadCharacterPack(dir)
     expect(pack.manifest.id).toBe('fixture-pack')
-    expect(pack.manifest.animations['idle']).toBe('animations/idle.webm')
+    expect(pack.manifest.animations.idle).toBe('animations/idle.webm')
     expect(pack.persona).toBe('# persona')
     expect(pack.manifest.emotion?.rates.happy).toBe(0.1)
   })

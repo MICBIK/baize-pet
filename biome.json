@@ -14,7 +14,8 @@
       "!**/coverage",
       "!**/*.md",
       "!docs",
-      "!**/.github"
+      "!**/.github",
+      "!pnpm-lock.yaml"
     ]
   },
   "formatter": {

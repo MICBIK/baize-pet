@@ -23,6 +23,20 @@ export const IpcChannel = {
   memoryExport: 'memory:export',
   memoryImport: 'memory:import',
   memoryClear: 'memory:clear',
+  /** Model wizard + chat (M4). The key never travels to the renderer. */
+  modelGet: 'model:get',
+  wizardSave: 'wizard:save',
+  wizardTest: 'wizard:test',
+  wizardOpenKeyPage: 'wizard:open-key-page',
+  chatSend: 'chat:send',
+  chatHistory: 'chat:history',
+  chatOpen: 'chat:open',
+  /** Main -> chat window streaming events. */
+  chatDelta: 'chat:delta',
+  chatDone: 'chat:done',
+  chatError: 'chat:error',
+  /** Main -> pet window: open the chat window. */
+  chatOpened: 'chat:opened',
 } as const
 
 /** Animation map of a character pack, as delivered to the renderer. */
@@ -34,6 +48,21 @@ export interface CharacterInfo {
 }
 
 /** Persisted application configuration (userData/config.json). */
+export const ModelConfigSchema = z.object({
+  providerId: z.string().min(1),
+  model: z.string().min(1),
+  /** Optional override of the preset baseURL. */
+  baseUrl: z.string().optional(),
+  /**
+   * Electron safeStorage ciphertext of the API key (base64). Plaintext keys are
+   * never written to disk, logs or error messages; keyless runtimes (Ollama)
+   * omit this field.
+   */
+  keyCipher: z.string().optional(),
+  /** Per-day token ceiling; null = unlimited. */
+  dailyTokenLimit: z.number().int().positive().nullable().default(null),
+})
+
 export const AppConfigSchema = z.object({
   /** Last known pet window position; must be validated against current displays on boot. */
   petWindow: z
@@ -44,9 +73,22 @@ export const AppConfigSchema = z.object({
     .optional(),
   /** Do-not-disturb: suppresses spontaneous behavior (wired into behavior in M2). */
   dnd: z.boolean().default(false),
+  /** Model configuration; null until the wizard completes. */
+  modelConfig: ModelConfigSchema.nullable().default(null),
+  /** The first-run wizard has been completed or skipped. */
+  wizardDone: z.boolean().default(false),
+  /** Today's cumulative token usage (reset by date comparison). */
+  tokenUsage: z
+    .object({
+      date: z.string(),
+      used: z.number().int().nonnegative(),
+    })
+    .nullable()
+    .default(null),
 })
 
 export type AppConfig = z.infer<typeof AppConfigSchema>
+export type ModelConfig = z.infer<typeof ModelConfigSchema>
 
 export const defaultAppConfig = (): AppConfig => AppConfigSchema.parse({})
 
