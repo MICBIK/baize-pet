@@ -80,10 +80,6 @@ const electronArgs = [desktopRoot.slice(0, -1), `--user-data-dir=${join(tempHome
 if (process.platform === 'linux') {
   electronArgs.push('--no-sandbox', '--disable-dev-shm-usage', '--password-store=gnome')
 }
-if (process.platform === 'linux') {
-  electronArgs.push('--no-sandbox', '--disable-dev-shm-usage')
-}
-electronArgs.push('--password-store=basic')
 
 const electronApp = await _electron.launch({
   executablePath: electronPath,
