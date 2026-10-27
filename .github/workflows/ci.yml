@@ -29,3 +29,29 @@ jobs:
         run: pnpm typecheck
       - name: Test (with coverage thresholds)
         run: pnpm test:coverage
+
+  smoke:
+    name: Smoke (production build, ubuntu + xvfb)
+    runs-on: ubuntu-latest
+    # Deliberately no ELECTRON_SKIP_BINARY_DOWNLOAD here: the smoke suite boots
+    # the real Electron binary against the production build (ADR 0006).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm (pinned via packageManager)
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build production bundle
+        run: pnpm build
+      - name: E2E smoke against out/
+        run: xvfb-run -a pnpm test:smoke
+      - name: Collect debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-debug
+          path: /tmp/baize-smoke-*
+          if-no-files-found: ignore
