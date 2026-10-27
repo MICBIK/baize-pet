@@ -108,11 +108,49 @@ describe('loadCharacterPack', () => {
     expect(() => loadCharacterPack(join(tempRoot, 'does-not-exist'))).toThrow(/not found/)
   })
 
+  it('accepts declarative scenes and passes candidates through', () => {
+    const dir = writePack('with-scenes', {
+      ...VALID_MANIFEST,
+      scenes: [
+        {
+          id: 'idle_spontaneous',
+          candidates: [
+            { action: 'idle_nap', baseWeight: 1, emotionAffinity: { happy: -0.4, bored: 0.6 } },
+            { action: 'idle_look', baseWeight: 1.2 },
+          ],
+        },
+      ],
+    })
+    const pack = loadCharacterPack(dir)
+    expect(pack.manifest.scenes).toHaveLength(1)
+    expect(pack.manifest.scenes?.[0]?.candidates).toHaveLength(2)
+    expect(pack.manifest.scenes?.[0]?.candidates[0]?.emotionAffinity?.bored).toBe(0.6)
+  })
+
+  it('rejects malformed scenes (empty candidates, bad baseWeight, bad hourRange)', () => {
+    const empty = writePack('scenes-empty', {
+      ...VALID_MANIFEST,
+      scenes: [{ id: 's', candidates: [] }],
+    })
+    expect(() => loadCharacterPack(empty)).toThrow(/candidates/)
+    const weight = writePack('scenes-weight', {
+      ...VALID_MANIFEST,
+      scenes: [{ id: 's', candidates: [{ action: 'a', baseWeight: 0 }] }],
+    })
+    expect(() => loadCharacterPack(weight)).toThrow(/baseWeight/)
+    const hours = writePack('scenes-hours', {
+      ...VALID_MANIFEST,
+      scenes: [{ id: 's', candidates: [{ action: 'a', baseWeight: 1, hourRange: [7, 99] }] }],
+    })
+    expect(() => loadCharacterPack(hours)).toThrow(/hourRange/)
+  })
+
   it('round-trips the repository placeholder pack', () => {
     const pack = loadCharacterPack(join(__dirname, '../../../characters/placeholder'))
     expect(pack.manifest.id).toBe('placeholder')
     expect(Object.keys(pack.manifest.animations)).toContain('idle')
     expect(pack.manifest.lines?.click?.length).toBeGreaterThan(0)
+    expect(pack.manifest.scenes?.[0]?.candidates.length).toBeGreaterThanOrEqual(3)
     expect(pack.persona).toContain('白泽')
   })
 })

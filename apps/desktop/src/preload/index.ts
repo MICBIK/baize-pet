@@ -60,6 +60,10 @@ const api = {
     hasKey: boolean
     dailyTokenLimit: number | null
   }> => ipcRenderer.invoke(IpcChannel.modelGet),
+  /** Public provider presets (id/label/defaultModel/needsKey/keyUrl) — no secrets. */
+  wizardPresets: (): Promise<
+    { id: string; label: string; defaultModel: string; needsKey: boolean; keyUrl: string | null }[]
+  > => ipcRenderer.invoke(IpcChannel.wizardPresets),
   wizardSave: (draft: {
     providerId: string
     model: string

@@ -8,8 +8,28 @@ permissions:
   contents: write
 
 jobs:
+  # Both platform builds upload into ONE draft release. Creating it here first
+  # prevents the electron-builder race where each runner drafts its own release
+  # for the same tag (one of them ending up with only a blockmap).
+  draft-release:
+    name: Ensure single draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the draft release for this tag (skip when it exists)
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "release $TAG already exists — reusing it"
+          else
+            gh release create "$TAG" --draft --title "$TAG"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+
   build:
     name: Build (${{ matrix.os }})
+    needs: draft-release
     strategy:
       fail-fast: false
       matrix:
@@ -40,10 +60,10 @@ jobs:
         run: |
           pnpm -r --filter '!@baize/desktop' run build
           pnpm --filter @baize/desktop run build
-      - name: Package and publish draft release
-        run: pnpm --filter @baize/desktop exec electron-builder ${{ matrix.args }} --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Publishing is done exclusively via gh release upload below; letting
+      # electron-builder publish would race across the two platform jobs.
+      - name: Package (no publish)
+        run: pnpm --filter @baize/desktop exec electron-builder ${{ matrix.args }} --publish never
       - name: Verify ad-hoc signature (macOS)
         if: runner.os == 'macOS'
         working-directory: apps/desktop
@@ -58,11 +78,14 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.exe
           if-no-files-found: error
-      # electron-builder's own publish step can be cut short when the job ends
-      # while a large file is still uploading; this re-upload is idempotent.
+      # Idempotent re-upload: electron-builder's own publish step can be cut
+      # short when the job ends while a large file is still uploading.
       - name: Ensure draft release assets
         working-directory: apps/desktop
         shell: bash
-        run: gh release upload "$GITHUB_REF_NAME" release/*.dmg release/*.exe release/*.blockmap release/latest*.yml --clobber
+        run: |
+          shopt -s nullglob
+          files=(release/*.dmg release/*.exe release/*.blockmap release/latest*.yml)
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -58,6 +58,27 @@ describe('optionsFor', () => {
   it('throws a readable error for an unknown provider', () => {
     expect(() => optionsFor({ providerId: 'nope', model: 'm' })).toThrow('未知的模型厂商：nope')
   })
+
+  it('rejects non-http(s) service addresses', () => {
+    expect(() =>
+      optionsFor({
+        providerId: 'deepseek',
+        model: 'deepseek-chat',
+        apiKey: 'k',
+        baseUrl: 'file:///etc',
+      }),
+    ).toThrow('服务地址必须以 http:// 或 https:// 开头')
+  })
+
+  it('accepts the custom provider with a user-entered http(s) endpoint', () => {
+    const options = optionsFor({
+      providerId: 'custom',
+      model: 'qwen2.5-7b-instruct',
+      apiKey: 'k',
+      baseUrl: 'http://127.0.0.1:8080/v1',
+    })
+    expect(options.baseUrl).toBe('http://127.0.0.1:8080/v1')
+  })
 })
 
 describe('withSavedKeyFallback', () => {
