@@ -187,7 +187,20 @@ const chatPage = await until(
   'chat window (chat.html)',
 )
 
-// --- 5. wizard test connection against the mock ------------------------------
+// --- 5. wizard presets over IPC + test connection against the mock -----------
+const presets = await settingsPage.evaluate(() => window.baize.wizardPresets())
+check(
+  'wizard presets delivered over IPC (incl. custom option)',
+  Array.isArray(presets) && presets.length >= 6 && presets.some((p) => p.id === 'custom'),
+  `${presets?.length} presets`,
+)
+check(
+  'presets carry no secret or endpoint fields',
+  presets.every(
+    (p) => !('baseUrl' in p) && !('keyCipher' in p) && !('protocol' in p) && !('capabilities' in p),
+  ),
+)
+
 const draft = {
   providerId: 'deepseek',
   model: 'deepseek-chat',
@@ -232,6 +245,42 @@ if (existsSync(configFile)) {
   )
   check('plaintext key never touches disk', !rawConfig.includes(draft.apiKey))
 }
+
+// --- 6b. drive the wizard UI: custom OpenAI-compatible provider --------------
+// Real clicks through the settings window: open the wizard, pick the custom
+// option, enter the mock endpoint, save via the "test and save" button.
+await settingsPage.locator('button', { hasText: '开始配置向导' }).click()
+await settingsPage.locator('button', { hasText: '自定义 OpenAI 兼容服务' }).click()
+const wizardInputs = settingsPage.locator('input')
+await wizardInputs.nth(0).fill(mockBaseUrl) // 服务地址
+await wizardInputs.nth(1).fill('sk-ui-key-456') // API key（可选）
+await wizardInputs.nth(2).fill('qwen2.5-7b-instruct') // 模型名
+await settingsPage.locator('button', { hasText: '测试连通并保存' }).click()
+await until(
+  async () => {
+    const body = await settingsPage.evaluate(() => document.body.textContent ?? '')
+    return body.includes('配置完成') ? true : null
+  },
+  30_000,
+  'wizard UI save to complete',
+)
+const uiSaveRequest = await until(
+  () =>
+    mock.requests.at(-1)?.authorization === 'Bearer sk-ui-key-456' ? mock.requests.at(-1) : null,
+  10_000,
+  'mock request from the wizard UI flow',
+)
+check(
+  'wizard UI flow hits the mock with the typed key',
+  uiSaveRequest.body?.model === 'qwen2.5-7b-instruct',
+  `url ${uiSaveRequest.url}`,
+)
+const rawConfigAfterUi = existsSync(configFile) ? readFileSync(configFile, 'utf8') : ''
+check(
+  'wizard UI flow saved the custom provider',
+  JSON.stringify(JSON.parse(rawConfigAfterUi || '{}').modelConfig)?.includes('"custom"'),
+)
+check('wizard UI key never touches disk', !rawConfigAfterUi.includes('sk-ui-key-456'))
 
 // --- 7. chat: streamed reply -------------------------------------------------
 await until(
