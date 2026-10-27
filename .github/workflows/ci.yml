@@ -46,16 +46,22 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build production bundle
         run: pnpm build
-      # safeStorage (key encryption) requires a secret backend on Linux; unlock
-      # a throwaway gnome-keyring inside a dbus session for the whole run.
+      # safeStorage (key encryption) requires a usable secret backend on Linux;
+      # run everything inside a dbus session with a throwaway unlocked
+      # gnome-keyring that exposes org.freedesktop.secrets.
       - name: E2E smoke against out/ (dbus + keyring session)
         run: |
           command -v gnome-keyring-daemon >/dev/null || {
             sudo apt-get update -qq
-            sudo apt-get install -y -qq gnome-keyring dbus-x11
+            sudo apt-get install -y -qq --no-install-recommends gnome-keyring dbus-x11
           }
           dbus-run-session -- bash -c '
-            echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock >/dev/null
+            set -e
+            eval "$(echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock --replace --components=secrets 2>/dev/null)"
+            gdbus call --session --dest org.freedesktop.DBus \
+              --object-path /org/freedesktop/DBus \
+              --method org.freedesktop.DBus.ListNames | grep -q org.freedesktop.secrets \
+              || { echo "org.freedesktop.secrets not on the bus" >&2; exit 1; }
             xvfb-run -a pnpm test:smoke
           '
       - name: Collect debug artifacts on failure
