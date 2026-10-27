@@ -15,6 +15,10 @@ describe('PROVIDER_PRESETS', () => {
     for (const preset of PROVIDER_PRESETS) {
       if (preset.id === 'ollama') {
         expect(preset.baseUrl).toMatch(/^http:\/\/localhost:\d+/)
+      } else if (preset.id === 'custom') {
+        // The custom option has no endpoint of its own — the user enters one and
+        // the app enforces the http(s) scheme at resolution time (llm-options).
+        expect(preset.baseUrl).toBe('')
       } else {
         expect(preset.baseUrl.startsWith('https://')).toBe(true)
       }

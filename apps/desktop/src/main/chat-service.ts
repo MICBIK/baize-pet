@@ -74,16 +74,34 @@ export class ChatService {
   async saveWizard(draft: WizardDraft): Promise<void> {
     const preset = presetById(draft.providerId)
     if (!preset) throw new LlmError('未知的模型厂商。')
+    if (draft.baseUrl && !/^https?:\/\//i.test(draft.baseUrl.trim())) {
+      throw new LlmError('服务地址必须以 http:// 或 https:// 开头。')
+    }
+    if (preset.id === 'custom') {
+      if (!draft.baseUrl || draft.baseUrl.trim().length === 0) {
+        throw new LlmError('请填写自定义服务的地址（Base URL）。')
+      }
+      if (!draft.model || draft.model.trim().length === 0) {
+        throw new LlmError('请填写自定义服务的模型名。')
+      }
+    }
+    // Re-entering the wizard and changing only the model keeps the stored key:
+    // the draft carries no plaintext, so the ciphertext is reused when the
+    // provider is unchanged.
     const keyCipher =
-      draft.apiKey && draft.apiKey.length > 0 ? this.encryptKey(draft.apiKey) : undefined
+      draft.apiKey && draft.apiKey.length > 0
+        ? this.encryptKey(draft.apiKey)
+        : withSavedKeyFallback(draft, this.config.get().modelConfig).keyCipher
     if (preset.needsKey && !keyCipher) {
       throw new LlmError('该厂商需要 API key。')
     }
+    const model = draft.model?.trim() || preset.defaultModel
+    if (!model) throw new LlmError('请填写模型名。')
     this.config.set({
       modelConfig: {
         providerId: draft.providerId,
-        model: draft.model || preset.defaultModel,
-        baseUrl: draft.baseUrl || preset.baseUrl,
+        model,
+        baseUrl: draft.baseUrl?.trim() || preset.baseUrl,
         keyCipher,
         dailyTokenLimit: draft.dailyTokenLimit ?? null,
       },
@@ -186,9 +204,13 @@ export class ChatService {
   }
 
   private async buildSystemPrompt(): Promise<string> {
-    const parts: string[] = [
-      '你是 BaiZe（白泽），一只住在主人桌面上的宠物。说话简短（一两句话以内）、口语化、可爱，偶尔调皮，但从不越界。',
-    ]
+    // Once the user has named the pet, the intro must use that name, not the
+    // pack's default "BaiZe".
+    const petName = (await this.engine.findSemanticBySource('pet_name'))?.content
+    const intro = petName
+      ? `你是${petName}（主人给你起的名字），一只住在主人桌面上的宠物。说话简短（一两句话以内）、口语化、可爱，偶尔调皮，但从不越界。`
+      : '你是 BaiZe（白泽），一只住在主人桌面上的宠物。说话简短（一两句话以内）、口语化、可爱，偶尔调皮，但从不越界。'
+    const parts: string[] = [intro]
     if (this.personaText) parts.push(this.personaText)
     const context = await this.engine.quickContext()
     if (context) parts.push(`你记得的关于主人的信息：\n${context}`)
@@ -208,7 +230,6 @@ export class ChatService {
     naming: boolean,
   ): Promise<void> {
     const facts = extractFacts(userText)
-    let named = false
     if (facts.userName) {
       await this.engine.recordSemanticFact(
         `主人的名字是${facts.userName}`,
@@ -219,7 +240,6 @@ export class ChatService {
           replaceSameSource: true,
         },
       )
-      named = true
     }
     if (facts.petName) {
       await this.engine.recordSemanticFact(
@@ -231,28 +251,30 @@ export class ChatService {
           replaceSameSource: true,
         },
       )
-      named = true
     }
     for (const preference of facts.preferences) {
       await this.engine.recordSemanticFact(`主人的偏好：${preference}`, 'preference', 6)
     }
 
-    if (named && naming) {
-      // The naming ceremony becomes the first, pinned episodic memory.
-      const userName = (await this.engine.findSemanticBySource('user_name'))?.content ?? ''
-      const petName = (await this.engine.findSemanticBySource('pet_name'))?.content ?? ''
-      await this.engine.record({
-        eventType: '起名',
-        content:
-          `${userName ? '主人告诉了自己的名字；' : ''}${petName ? '并给我起了名字。' : ''}`.trim() ||
-          '我们完成了起名仪式。',
-        emotionTags: ['开心'],
-        topicTags: ['家人'],
-        participants: ['主人', '白泽'],
-        importance: 10,
-        pinned: true,
-      })
-      this.onNamingComplete()
+    if (naming) {
+      // The ceremony completes only when BOTH names are on record — the two
+      // halves may arrive in separate turns. Until then no episodic "起名"
+      // entry is written; once both exist this branch never re-runs (the
+      // conversation is no longer naming-pending), so it records exactly once.
+      const userNameFact = await this.engine.findSemanticBySource('user_name')
+      const petNameFact = await this.engine.findSemanticBySource('pet_name')
+      if (userNameFact && petNameFact) {
+        await this.engine.record({
+          eventType: '起名',
+          content: `主人告诉了自己的名字（${userNameFact.content}），并给我起了名字（${petNameFact.content}）。`,
+          emotionTags: ['开心'],
+          topicTags: ['家人'],
+          participants: ['主人', petNameFact.content],
+          importance: 10,
+          pinned: true,
+        })
+        this.onNamingComplete()
+      }
     }
 
     const summary = `主人说：${userText.slice(0, 120)}｜白泽答：${reply.slice(0, 120)}`

@@ -130,35 +130,45 @@ export class BehaviorSelector {
     const matched = this.rules.filter((rule) => rule.match(context))
     if (matched.length === 0) return null
 
-    const scores = new Map<string, number>()
-    for (const rule of matched) {
-      for (const candidate of rule.candidates(context)) {
-        if (candidate.hourRange) {
-          const [start, end] = candidate.hourRange
-          const hour = context.now.getHours()
-          const inRange = start <= end ? hour >= start && hour <= end : hour >= start || hour <= end
-          if (!inRange) continue
+    const collect = (respectMaxConsecutive: boolean): Map<string, number> => {
+      const scores = new Map<string, number>()
+      for (const rule of matched) {
+        for (const candidate of rule.candidates(context)) {
+          if (candidate.hourRange) {
+            const [start, end] = candidate.hourRange
+            const hour = context.now.getHours()
+            const inRange =
+              start <= end ? hour >= start && hour <= end : hour >= start || hour <= end
+            if (!inRange) continue
+          }
+          if (
+            respectMaxConsecutive &&
+            context.lastAction === candidate.action &&
+            context.consecutiveCount >= this.config.maxConsecutive
+          ) {
+            continue
+          }
+          const recent = context.recentActionCounts.get(candidate.action) ?? 0
+          const penalty = this.config.repeatPenalty ** recent
+          const affinity = candidate.emotionAffinity ?? {}
+          const emotionFactor =
+            1 +
+            (Object.keys(affinity) as (keyof EmotionVector)[]).reduce(
+              (sum, key) => sum + (affinity[key] ?? 0) * context.emotion[key],
+              0,
+            )
+          const utility = candidate.baseWeight * emotionFactor * penalty
+          scores.set(candidate.action, Math.max(scores.get(candidate.action) ?? 0, utility))
         }
-        if (
-          context.lastAction === candidate.action &&
-          context.consecutiveCount >= this.config.maxConsecutive
-        ) {
-          continue
-        }
-        const recent = context.recentActionCounts.get(candidate.action) ?? 0
-        const penalty = this.config.repeatPenalty ** recent
-        const affinity = candidate.emotionAffinity ?? {}
-        const emotionFactor =
-          1 +
-          (Object.keys(affinity) as (keyof EmotionVector)[]).reduce(
-            (sum, key) => sum + (affinity[key] ?? 0) * context.emotion[key],
-            0,
-          )
-        const utility = candidate.baseWeight * emotionFactor * penalty
-        scores.set(candidate.action, Math.max(scores.get(candidate.action) ?? 0, utility))
       }
+      return scores
     }
 
+    // When every candidate is excluded by maxConsecutive (e.g. a single-candidate
+    // pack), relax the cap instead of returning null — the pet must always have
+    // some action available, and history keeps counting so the penalty applies.
+    let scores = collect(true)
+    if (scores.size === 0) scores = collect(false)
     const action = softmaxDraw(scores, this.config.temperature, this.random)
     if (!action) return null
     return { action, sceneId: matched[0]?.id ?? '', utility: scores.get(action) ?? 0 }
