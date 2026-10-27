@@ -71,11 +71,14 @@ const electronPath = desktopRequire('electron')
 // Launch the app directory (not the main.js file) so app.getAppPath() resolves
 // exactly like a real install: package.json "main" → out/main/index.js.
 // --user-data-dir redirects Electron's userData (config + memory DB) to a temp
-// profile. safeStorage needs a secret backend: on Linux CI the job unlocks a
-// gnome-keyring inside a dbus session before launching (see ci.yml).
+// profile. safeStorage on Linux only reports available for a real secret
+// backend: --password-store=gnome selects the libsecret backend (the ci.yml
+// job runs a dbus session with an unlocked gnome-keyring for it); basic_text
+// would make isEncryptionAvailable() false and the wizard would refuse to
+// store the key — correct product behavior, just not testable bare.
 const electronArgs = [desktopRoot.slice(0, -1), `--user-data-dir=${join(tempHome, 'user-data')}`]
 if (process.platform === 'linux') {
-  electronArgs.push('--no-sandbox', '--disable-dev-shm-usage')
+  electronArgs.push('--no-sandbox', '--disable-dev-shm-usage', '--password-store=gnome')
 }
 if (process.platform === 'linux') {
   electronArgs.push('--no-sandbox', '--disable-dev-shm-usage')
