@@ -72,13 +72,14 @@ const electronPath = desktopRequire('electron')
 // exactly like a real install: package.json "main" → out/main/index.js.
 // --user-data-dir redirects Electron's userData (config + memory DB) to a temp
 // profile. safeStorage on Linux only reports available for a real secret
-// backend: --password-store=gnome selects the libsecret backend (the ci.yml
-// job runs a dbus session with an unlocked gnome-keyring for it); basic_text
-// would make isEncryptionAvailable() false and the wizard would refuse to
-// store the key — correct product behavior, just not testable bare.
+// backend: --password-store=gnome-libsecret selects the freedesktop Secret
+// Service backend (the ci.yml job runs a dbus session with an unlocked
+// gnome-keyring for it); the basic_text fallback makes isEncryptionAvailable()
+// false and the wizard would refuse to store the key — correct product
+// behavior, just not testable bare.
 const electronArgs = [desktopRoot.slice(0, -1), `--user-data-dir=${join(tempHome, 'user-data')}`]
 if (process.platform === 'linux') {
-  electronArgs.push('--no-sandbox', '--disable-dev-shm-usage', '--password-store=gnome')
+  electronArgs.push('--no-sandbox', '--disable-dev-shm-usage', '--password-store=gnome-libsecret')
 }
 
 const electronApp = await _electron.launch({
