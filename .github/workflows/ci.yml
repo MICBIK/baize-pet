@@ -60,9 +60,11 @@ jobs:
           ldconfig -p | grep libsecret-1.so.0 || { echo "libsecret missing" >&2; exit 1; }
           dbus-run-session -- bash -c '
             set -e
-            # Export the daemon environment (GNOME_KEYRING_CONTROL) so the
-            # unlock invocation below reaches THIS daemon instead of spawning
-            # a second one that never talks to the session bus.
+            # The daemon keeps its control socket under XDG_RUNTIME_DIR; the
+            # runner has no /run/user/<uid>, so provide a writable one —
+            # without it the unlock below cannot reach the daemon.
+            export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$PWD/.xdg-runtime}"
+            mkdir -p "$XDG_RUNTIME_DIR"
             eval "$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)"
             echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL"
             echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock 2>&1 | sed "s/^/unlock: /"
