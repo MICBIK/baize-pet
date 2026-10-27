@@ -46,8 +46,18 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build production bundle
         run: pnpm build
-      - name: E2E smoke against out/
-        run: xvfb-run -a pnpm test:smoke
+      # safeStorage (key encryption) requires a secret backend on Linux; unlock
+      # a throwaway gnome-keyring inside a dbus session for the whole run.
+      - name: E2E smoke against out/ (dbus + keyring session)
+        run: |
+          command -v gnome-keyring-daemon >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gnome-keyring dbus-x11
+          }
+          dbus-run-session -- bash -c '
+            echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock >/dev/null
+            xvfb-run -a pnpm test:smoke
+          '
       - name: Collect debug artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4

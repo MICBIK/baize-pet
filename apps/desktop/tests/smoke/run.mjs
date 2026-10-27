@@ -71,12 +71,9 @@ const electronPath = desktopRequire('electron')
 // Launch the app directory (not the main.js file) so app.getAppPath() resolves
 // exactly like a real install: package.json "main" → out/main/index.js.
 // --user-data-dir redirects Electron's userData (config + memory DB) to a temp
-// profile; --password-store=basic keeps safeStorage working without a keyring.
-const electronArgs = [
-  desktopRoot.slice(0, -1),
-  `--user-data-dir=${join(tempHome, 'user-data')}`,
-  '--password-store=basic',
-]
+// profile. safeStorage needs a secret backend: on Linux CI the job unlocks a
+// gnome-keyring inside a dbus session before launching (see ci.yml).
+const electronArgs = [desktopRoot.slice(0, -1), `--user-data-dir=${join(tempHome, 'user-data')}`]
 if (process.platform === 'linux') {
   electronArgs.push('--no-sandbox', '--disable-dev-shm-usage')
 }
