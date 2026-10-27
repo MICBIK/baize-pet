@@ -13,6 +13,25 @@ function animationUrl(info: CharacterInfo, action: PetActionName): string {
   return `baize-character://${info.id}/${file}`
 }
 
+/** The video's drawn area inside the element (object-fit: contain letterboxing removed). */
+function containRect(video: HTMLVideoElement): {
+  left: number
+  top: number
+  width: number
+  height: number
+} {
+  const rect = video.getBoundingClientRect()
+  const scale = Math.min(rect.width / video.videoWidth, rect.height / video.videoHeight)
+  const width = video.videoWidth * scale
+  const height = video.videoHeight * scale
+  return {
+    left: rect.left + (rect.width - width) / 2,
+    top: rect.top + (rect.height - height) / 2,
+    width,
+    height,
+  }
+}
+
 /**
  * The pet layer: plays the current action's animation, runs the per-pixel alpha
  * hit test that toggles window click-through, and drives window dragging.
@@ -52,30 +71,43 @@ export function PetLayer() {
     }
   }, [])
 
-  /** Alpha hit test against the current video frame. */
+  /**
+   * Alpha hit test against the current video frame. If pixel readback fails
+   * (e.g. a tainted canvas), the drawn bounding box is used as the fallback so
+   * the pet can never become fully unclickable.
+   */
   const hitTest = useCallback(
     (clientX: number, clientY: number) => {
       const video = videoRef.current
       if (!video || video.readyState < 2 || video.videoWidth === 0) return
-      if (!canvasRef.current) canvasRef.current = document.createElement('canvas')
-      const canvas = canvasRef.current
-      if (canvas.width !== video.videoWidth) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-      }
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) return
-      const rect = video.getBoundingClientRect()
-      const scale = video.videoWidth / rect.width
-      const x = Math.floor((clientX - rect.left) * scale)
-      const y = Math.floor((clientY - rect.top) * scale)
-      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
+      const rect = containRect(video)
+      const insideBox =
+        clientX >= rect.left &&
+        clientX < rect.left + rect.width &&
+        clientY >= rect.top &&
+        clientY < rect.top + rect.height
+      if (!insideBox) {
         setInteractive(false)
         return
       }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const alpha = ctx.getImageData(x, y, 1, 1).data[3] ?? 0
-      setInteractive(alpha > HIT_ALPHA_THRESHOLD)
+      try {
+        if (!canvasRef.current) canvasRef.current = document.createElement('canvas')
+        const canvas = canvasRef.current
+        if (canvas.width !== video.videoWidth) {
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+        }
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        if (!ctx) throw new Error('canvas 2d context unavailable')
+        const scale = video.videoWidth / rect.width
+        const x = Math.floor((clientX - rect.left) * scale)
+        const y = Math.floor((clientY - rect.top) * scale)
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const alpha = ctx.getImageData(x, y, 1, 1).data[3] ?? 0
+        setInteractive(alpha > HIT_ALPHA_THRESHOLD)
+      } catch {
+        setInteractive(true)
+      }
     },
     [setInteractive],
   )
@@ -139,6 +171,7 @@ export function PetLayer() {
       <video
         ref={videoRef}
         src={animationUrl(character, action)}
+        crossOrigin="anonymous"
         autoPlay
         loop={looping}
         muted

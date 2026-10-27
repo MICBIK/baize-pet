@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadCharacterPack } from '@baize/core'
 import { presetById } from '@baize/llm'
@@ -25,23 +25,52 @@ import { createTray } from './tray'
 const BUILT_IN_PACK_ID = 'placeholder'
 
 // Custom scheme serving character pack files to the renderer (media-src in the CSP).
+// standard/secure/corsEnabled are required so <video> frames stay untainted for the
+// renderer's canvas alpha hit test (a tainted canvas makes the pet unclickable).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'baize-character', privileges: { stream: true, supportFetchAPI: true } },
+  {
+    scheme: 'baize-character',
+    privileges: {
+      standard: true,
+      secure: true,
+      corsEnabled: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
 ])
 
 function registerCharacterProtocol(): void {
   const root = app.isPackaged
     ? resolve(process.resourcesPath, 'characters')
     : resolve(app.getAppPath(), '../../characters')
-  protocol.handle('baize-character', (request) => {
+  protocol.handle('baize-character', async (request) => {
     const url = new URL(request.url)
-    const packDir = resolve(root, url.hostname)
-    const filePath = resolve(packDir, decodeURIComponent(url.pathname).replace(/^\//, ''))
-    if (!filePath.startsWith(packDir)) {
+    // The pack directory must live directly inside the characters root, and the
+    // requested file inside that pack directory (separator-aware comparison).
+    const packDir = resolve(root, decodeURIComponent(url.hostname))
+    if (!isInside(root, packDir)) {
       return new Response('forbidden', { status: 403 })
     }
-    return net.fetch(pathToFileURL(filePath).toString())
+    const filePath = resolve(packDir, decodeURIComponent(url.pathname).replace(/^\//, ''))
+    if (!isInside(packDir, filePath)) {
+      return new Response('forbidden', { status: 403 })
+    }
+    const response = await net.fetch(pathToFileURL(filePath).toString())
+    // Mirror the file response with a permissive CORS header so cross-origin
+    // <video> consumption keeps the drawing buffer readable.
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: { ...Object.fromEntries(response.headers), 'Access-Control-Allow-Origin': '*' },
+    })
   })
+}
+
+/** True when `child` equals or lies inside `parent` (no sibling-prefix escapes). */
+function isInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
 function rendererWindowOptions(title: string): BrowserWindowConstructorOptions {

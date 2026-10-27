@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { join } from 'node:path'
 import {
-  AnthropicAdapter,
-  type ChatAdapter,
   type ChatMessage,
   DailyTokenBudget,
   estimateTokens,
   LlmError,
-  OpenAiCompatibleAdapter,
   type ProviderPreset,
   presetById,
 } from '@baize/llm'
 import type { SqliteMemoryEngine } from '@baize/memory'
-import type { ModelConfig } from '@baize/shared'
 import { type BrowserWindow, safeStorage } from 'electron'
 import type { ConfigStore } from './config'
 import { extractFacts } from './extract'
+import { adapterFor, optionsFor, withSavedKeyFallback } from './llm-options'
 
 export interface WizardDraft {
   providerId: string
@@ -98,13 +95,19 @@ export class ChatService {
     draft: WizardDraft,
   ): Promise<{ ok: boolean; error?: string; reply?: string }> {
     try {
-      const adapter = this.adapterFor(draft)
+      // A re-run of the wizard may not retype the key: fall back to the stored
+      // one when the provider is unchanged (the draft never carries ciphertext).
+      const source = withSavedKeyFallback(draft, this.config.get().modelConfig)
+      const adapter = adapterFor(draft.providerId)
       const messages: ChatMessage[] = [
         { role: 'system', content: '连接测试。请回复"连接成功"四个字。' },
         { role: 'user', content: 'ping' },
       ]
       let reply = ''
-      for await (const delta of adapter.chat(messages, this.optionsFor(draft))) {
+      for await (const delta of adapter.chat(
+        messages,
+        optionsFor(source, (cipher) => this.decryptKey(cipher)),
+      )) {
         reply += delta.text
       }
       return { ok: true, reply: reply.trim().slice(0, 100) }
@@ -150,9 +153,12 @@ export class ChatService {
     const naming = await this.isNamingPending()
     let full = ''
     try {
-      const adapter = this.adapterFor(modelConfig)
+      const adapter = adapterFor(modelConfig.providerId)
       let reportedTokens: number | undefined
-      for await (const delta of adapter.chat(messages, this.optionsFor(modelConfig))) {
+      for await (const delta of adapter.chat(
+        messages,
+        optionsFor(modelConfig, (cipher) => this.decryptKey(cipher)),
+      )) {
         if (delta.text) {
           full += delta.text
           window.webContents.send('chat:delta', { text: delta.text })
@@ -177,23 +183,6 @@ export class ChatService {
 
   history(): { role: 'user' | 'assistant'; content: string }[] {
     return this.engine.workingTurns().map((turn) => ({ role: turn.role, content: turn.content }))
-  }
-
-  private adapterFor(source: { providerId: string } & Partial<ModelConfig>): ChatAdapter {
-    const preset = presetById(source.providerId)
-    if (!preset) throw new LlmError(`未知的模型厂商：${source.providerId}`)
-    if (preset.protocol === 'anthropic') {
-      return new AnthropicAdapter()
-    }
-    return new OpenAiCompatibleAdapter(preset.id, preset.capabilities)
-  }
-
-  private optionsFor(source: Partial<ModelConfig> & { model: string; apiKey?: string }) {
-    return {
-      model: source.model,
-      apiKey: source.keyCipher ? this.decryptKey(source.keyCipher) : undefined,
-      baseUrl: source.baseUrl,
-    }
   }
 
   private async buildSystemPrompt(): Promise<string> {
