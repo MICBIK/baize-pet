@@ -72,5 +72,8 @@ export function optionsFor(
         ? decryptKey(source.keyCipher)
         : undefined
   const baseUrl = source.baseUrl && source.baseUrl.length > 0 ? source.baseUrl : preset.baseUrl
+  if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+    throw new LlmError('服务地址必须以 http:// 或 https:// 开头。')
+  }
   return { model: source.model, apiKey, baseUrl }
 }

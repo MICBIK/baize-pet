@@ -25,6 +25,8 @@ export const IpcChannel = {
   memoryClear: 'memory:clear',
   /** Model wizard + chat (M4). The key never travels to the renderer. */
   modelGet: 'model:get',
+  /** Public provider preset list for the wizard UI (id/label/model/needsKey/keyUrl only). */
+  wizardPresets: 'wizard:presets',
   wizardSave: 'wizard:save',
   wizardTest: 'wizard:test',
   wizardOpenKeyPage: 'wizard:open-key-page',

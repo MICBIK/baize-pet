@@ -5,10 +5,15 @@
 ## 内容
 
 ```
-manifest.json            # 角色包描述（名称、版本、动作 → 动画文件映射）
-animations/idle_breath.webm  # 待机呼吸（3s 循环，VP9 + alpha）
+manifest.json            # 角色包描述（名称、版本、动作 → 动画文件映射、自发行为 scenes）
+animations/idle_breath.webm  # 待机呼吸/小盹（3s 循环，VP9 + alpha）
+animations/idle_look.webm    # 自发：好奇张望（4s 循环）
+animations/idle_wiggle.webm  # 自发：开心扭动（2.5s 循环）
 animations/click.webm        # 点击反应（1s 单次）
 animations/drag.webm         # 拖拽摇摆（1.5s 循环）
+
+自发行为候选来自 manifest 的 `scenes` 字段（idle_spontaneous 场景，
+3 个候选：idle_nap / idle_look / idle_wiggle），台词池按场景 id 配置。
 persona/persona.md       # 人设文档（喂给 LLM 的 system prompt 素材）
 LICENSE.txt              # 资产授权声明（随仓库 AGPL-3.0-only）
 ```

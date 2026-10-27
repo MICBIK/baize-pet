@@ -23,7 +23,7 @@
 ## 2026-10-26（M4）
 
 5. **Anthropic 预设的默认模型名**
-   - 说明：`claude-sonnet-4-5` 为当前写入的默认值，仅供占位；产品侧应确认向导中 Anthropic 档默认推荐哪个模型（以及是否随时间更新），模型名可由用户在向导中覆盖。
+   - 说明：向导默认值已按 2026-10 的公开信息更新为 `claude-sonnet-5-5`（Sonnet 5.5，2026-09-28 发布），但 Anthropic 未在其文档中确认该 API 字符串的准确写法（也可能是带日期后缀的别名）。产品侧应确认向导中 Anthropic 档默认推荐哪个模型（以及是否随时间更新），模型名可由用户在向导中覆盖。
 
 6. **"点击宠物或快捷键打开输入框"中快捷键的实现方式**
    - 说明：本轮实现了"点击宠物打开独立聊天窗口"；"快捷键"未做全局快捷键（`globalShortcut` 会占用系统级组合键，存在与用户已有快捷键冲突的产品判断），保守起见留给下一轮（可做成设置项，默认关闭）。07 原文为"点击宠物**或**快捷键"，单一路径已满足验收。
@@ -33,3 +33,14 @@
 
 8. **renderer 侧 `window.baize` 部分方法类型推断为 any**
    - 说明：root tsconfig（moduleResolution: bundler）下，`baize.d.ts` 经 `typeof api` 引入的 preload API 中，部分新增方法在 renderer 文件里推断为 any（已用显式参数类型标注绕过，不影响运行时）。待后续统一 renderer/preload 的类型组织方式（如独立 `env.d.ts` 直接引用 shared 类型）。
+
+## 2026-10-27（修复轮）
+
+9. **厂商预设默认模型名的准确字符串**
+   - 说明：`moonshot-v1-8k`、`abab6.5s-chat` 已过时，本轮按公开信息更新为：DeepSeek `deepseek-chat`（官方端点继续服务 V4 系列，置信高）、GLM `glm-4.7`（2025-12 旗舰）、Kimi `kimi-latest`（官方别名，跟随旗舰）、MiniMax `MiniMax-M2.5`（M 系列当前推荐，**API 字符串的大小写/版本号未能从官方文档确认**）、Anthropic `claude-sonnet-5-5`（同 #5）。Ollama 本地档维持 `llama3.2`，但 Ollama 模型由用户本地拉取，默认值意义有限，可考虑改为引导用户输入已拉取的模型名。所有默认值用户均可在向导覆盖；请产品侧逐档确认。
+
+10. **v0.1.0-alpha.1 遗留的重复草稿 Release 清理**
+    - 说明：修复前 Mac/Windows 两个任务各建了一个草稿 Release（其一只有 blockmap）。本轮发布流程已改为先行建好唯一草稿（release.yml 的 `draft-release` 任务），但**旧 tag 下的两个草稿仍留在仓库里**，按约定不删除，请项目负责人自行清理（删除多余草稿、保留正确的一个再发布）。
+
+11. **CI 冒烟任务对 Electron `--user-data-dir` 开关的依赖**
+    - 说明：冒烟测试用 Electron 自带的 `--user-data-dir` 命令行开关把 userData 重定向到临时目录（ADR 0006）。该行为由 Electron 层保证、与应用代码解耦；若未来 Electron 移除此开关，需要在应用内提供等价的 userData 覆盖入口（届时补 ADR）。

@@ -10,7 +10,7 @@
 //
 // Usage: scripts/generate-placeholder-animations.mjs [animations-dir] [assets-dir]
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   BufferSource,
@@ -70,8 +70,34 @@ const dragColor =
   `:b='if(${dragEyes},45,if(${dragBody},225,0))'`
 const dragAlpha = `if(${dragEyes}+${dragBody},255,0)`
 
+// idle_look: 4s loop, body breathes gently while the eyes glance sideways
+// (slow ease to one side, hold, ease back) — a curious "looking around" pose.
+const lookBodyR = '(70+4*sin(2*PI*T/2))'
+const lookEyeDx = '(9*sin(PI*T/2))'
+const lookEyes = `lt(hypot(X-104-${lookEyeDx},Y-116),10)+lt(hypot(X-152-${lookEyeDx},Y-116),10)`
+const lookBody = `lt(hypot(X-128,Y-140),${lookBodyR})`
+const lookColor =
+  `r='if(${lookEyes},60,if(${lookBody},255,0))'` +
+  `:g='if(${lookEyes},50,if(${lookBody},245,0))'` +
+  `:b='if(${lookEyes},45,if(${lookBody},225,0))'`
+const lookAlpha = `if(${lookEyes}+${lookBody},255,0)`
+
+// idle_wiggle: 2.5s loop, body does a small happy wiggle (squash & stretch in
+// place, no translation) — used for upbeat spontaneous moments.
+const wiggleBodyRx = '(70+5*sin(2*PI*T/1.25))'
+const wiggleBodyRy = '(70-5*sin(2*PI*T/1.25))'
+const wiggleBody = `lt(pow((X-128)/${wiggleBodyRx},2)+pow((Y-140)/${wiggleBodyRy},2),1)`
+const wiggleEyes = 'lt(hypot(X-104,Y-116),10)+lt(hypot(X-152,Y-116),10)'
+const wiggleColor =
+  `r='if(${wiggleEyes},60,if(${wiggleBody},255,0))'` +
+  `:g='if(${wiggleEyes},50,if(${wiggleBody},245,0))'` +
+  `:b='if(${wiggleEyes},45,if(${wiggleBody},225,0))'`
+const wiggleAlpha = `if(${wiggleEyes}+${wiggleBody},255,0)`
+
 const ANIMATIONS = [
   { file: 'idle_breath.webm', duration: 3, color: idleColor, alpha: idleAlpha },
+  { file: 'idle_look.webm', duration: 4, color: lookColor, alpha: lookAlpha },
+  { file: 'idle_wiggle.webm', duration: 2.5, color: wiggleColor, alpha: wiggleAlpha },
   { file: 'click.webm', duration: 1, color: clickColor, alpha: clickAlpha },
   { file: 'drag.webm', duration: 1.5, color: dragColor, alpha: dragAlpha },
 ]
@@ -192,5 +218,8 @@ for (const anim of ANIMATIONS) {
   const prefix = `${outDir}/.${anim.file}`
   encodeStreams(anim.color, anim.alpha, anim.duration, prefix)
   await muxWithAlpha(`${prefix}.color.webm`, `${prefix}.alpha.webm`, `${outDir}/${anim.file}`)
+  // The two intermediate streams are not needed once merged.
+  rmSync(`${prefix}.color.webm`, { force: true })
+  rmSync(`${prefix}.alpha.webm`, { force: true })
 }
 generateTrayIcon(`${iconOut}/tray.png`)

@@ -117,6 +117,29 @@ describe('BehaviorSelector', () => {
     expect(maxConsecutiveSeen).toBeLessThanOrEqual(2)
   })
 
+  it('still picks an action when every candidate is excluded by maxConsecutive', () => {
+    // A single-candidate pack used to deadlock: after maxConsecutive repeats the
+    // candidate was excluded forever, pick() returned null and history froze.
+    const napOnly: SceneRule = {
+      id: 'nap',
+      match: () => true,
+      candidates: () => [{ action: 'idle_nap', baseWeight: 1 }],
+    }
+    const config = { ...DEFAULT_BEHAVIOR_CONFIG, cooldownMs: 0, maxConsecutive: 2 }
+    const selector = new BehaviorSelector([napOnly], config, mulberry32(5))
+    const history = new BehaviorHistory()
+    for (let i = 0; i < 5; i++) {
+      const pick = selector.pick({
+        ...baseContext(),
+        ...history.snapshot(config.recencyWindowMs, i * 1000),
+      })
+      expect(pick).not.toBeNull()
+      expect(pick?.action).toBe('idle_nap')
+      history.record(pick?.action ?? '', i * 1000)
+    }
+    expect(history.snapshot(config.recencyWindowMs, 10_000).consecutiveCount).toBe(5)
+  })
+
   it('respects the cooldown between spontaneous picks', () => {
     let clock = 10_000
     const selector = new BehaviorSelector(

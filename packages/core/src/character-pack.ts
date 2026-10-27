@@ -30,6 +30,29 @@ export const BehaviorParamsSchema = z.object({
   repeatPenalty: z.number().min(0).max(1),
 })
 
+/** One candidate action inside a manifest scene (mirrors @baize/core CandidateAction). */
+export const SceneCandidateSchema = z.object({
+  action: z.string().min(1),
+  baseWeight: z.number().positive(),
+  emotionAffinity: z
+    .object({
+      happy: z.number().min(-5).max(5),
+      bored: z.number().min(-5).max(5),
+      angry: z.number().min(-5).max(5),
+      miss: z.number().min(-5).max(5),
+    })
+    .partial()
+    .optional(),
+  /** Inclusive hour-of-day range [start, end]; may wrap midnight (e.g. [22, 6]). */
+  hourRange: z.tuple([z.number().int().min(0).max(23), z.number().int().min(0).max(23)]).optional(),
+})
+
+/** A declarative scene: id + candidate actions (see docs/03 §3.3). */
+export const SceneSchema = z.object({
+  id: z.string().min(1),
+  candidates: z.array(SceneCandidateSchema).min(1),
+})
+
 export const CharacterManifestSchema = z.object({
   id: z
     .string()
@@ -43,6 +66,8 @@ export const CharacterManifestSchema = z.object({
     .refine((animations) => 'idle' in animations, { message: 'the "idle" animation is required' }),
   emotion: EmotionParamsSchema.optional(),
   behavior: BehaviorParamsSchema.optional(),
+  /** Optional declarative scenes for spontaneous behavior; packs may omit it. */
+  scenes: z.array(SceneSchema).optional(),
   lines: z.record(z.string().min(1), z.array(z.string().min(1))).optional(),
 })
 

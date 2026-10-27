@@ -21,6 +21,8 @@ export {
   emotionParamsOf,
   type LoadedCharacterPack,
   loadCharacterPack,
+  SceneCandidateSchema,
+  SceneSchema,
 } from './character-pack'
 export {
   DEFAULT_EMOTION_PARAMS,

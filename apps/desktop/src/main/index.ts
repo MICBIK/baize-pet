@@ -2,7 +2,7 @@
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadCharacterPack } from '@baize/core'
-import { presetById } from '@baize/llm'
+import { PROVIDER_PRESETS, presetById } from '@baize/llm'
 import { IpcChannel } from '@baize/shared'
 import {
   app,
@@ -179,9 +179,21 @@ app
 
     // -- Model wizard & chat (M4) -------------------------------------------
     ipcMain.handle(IpcChannel.modelGet, () => chat.status())
-    ipcMain.handle(IpcChannel.wizardSave, (_event, draft: WizardDraft) => {
+    // Public preset metadata for the wizard UI — no protocol/capabilities/baseUrl
+    // plumbing and, above all, no secrets.
+    ipcMain.handle(IpcChannel.wizardPresets, () =>
+      PROVIDER_PRESETS.map(({ id, label, defaultModel, needsKey, keyUrl }) => ({
+        id,
+        label,
+        defaultModel,
+        needsKey,
+        keyUrl,
+      })),
+    )
+    ipcMain.handle(IpcChannel.wizardSave, async (_event, draft: WizardDraft) => {
       try {
-        return chat.saveWizard(draft).then(() => ({ ok: true }))
+        await chat.saveWizard(draft)
+        return { ok: true }
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) }
       }

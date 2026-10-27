@@ -15,11 +15,12 @@ interface ModelStatus {
   dailyTokenLimit: number | null
 }
 
-interface ProviderPreset {
+/** Public preset metadata delivered over IPC (no secrets, no endpoint plumbing). */
+interface ProviderPresetInfo {
   id: string
   label: string
-  needsKey: boolean
   defaultModel: string
+  needsKey: boolean
   keyUrl: string | null
 }
 
@@ -46,104 +47,78 @@ const inputStyle: React.CSSProperties = {
   marginBottom: 10,
 }
 
-// Presets mirrored from @baize/llm (the sandboxed renderer loads no runtime deps).
-const PRESETS: ProviderPreset[] = [
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    needsKey: true,
-    defaultModel: 'deepseek-chat',
-    keyUrl: 'https://platform.deepseek.com/api_keys',
-  },
-  {
-    id: 'glm',
-    label: '智谱 GLM',
-    needsKey: true,
-    defaultModel: 'glm-4-flash',
-    keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
-  },
-  {
-    id: 'kimi',
-    label: 'Kimi（月之暗面）',
-    needsKey: true,
-    defaultModel: 'moonshot-v1-8k',
-    keyUrl: 'https://platform.moonshot.cn/console/api-keys',
-  },
-  {
-    id: 'minimax',
-    label: 'MiniMax',
-    needsKey: true,
-    defaultModel: 'abab6.5s-chat',
-    keyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama（本地）',
-    needsKey: false,
-    defaultModel: 'llama3.2',
-    keyUrl: null,
-  },
-  {
-    id: 'anthropic',
-    label: 'Claude（Anthropic）',
-    needsKey: true,
-    defaultModel: 'claude-sonnet-4-5',
-    keyUrl: 'https://console.anthropic.com/settings/keys',
-  },
-]
-
 /** Model configuration wizard (first launch, re-enterable from settings). */
-function ModelWizard({ onDone }: { onDone: () => void }) {
+function ModelWizard({ status, onDone }: { status: ModelStatus | null; onDone: () => void }) {
+  const [presets, setPresets] = useState<ProviderPresetInfo[] | null>(null)
   const [providerId, setProviderId] = useState<string | null>(null)
   const [model, setModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [limit, setLimit] = useState('')
-  const [status, setStatus] = useState<string>('')
+  const [statusText, setStatusText] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const preset = PRESETS.find((candidate) => candidate.id === providerId) ?? null
+  useEffect(() => {
+    window.baize
+      .wizardPresets()
+      .then(setPresets)
+      .catch((error: unknown) => setStatusText(`读取厂商列表失败：${String(error)}`))
+  }, [])
 
-  const pick = (candidate: ProviderPreset) => {
+  const preset = presets?.find((candidate) => candidate.id === providerId) ?? null
+  const isCustom = preset?.id === 'custom'
+  // Re-entering the wizard for the same provider: an empty key field reuses the
+  // stored one (both test and save resolve through the saved ciphertext).
+  const canReuseKey =
+    status?.hasKey === true && status.providerId === preset?.id && apiKey.length === 0
+
+  const pick = (candidate: ProviderPresetInfo) => {
     setProviderId(candidate.id)
     setModel(candidate.defaultModel)
-    setStatus('')
+    setBaseUrl('')
+    setStatusText('')
   }
 
   const draft = useCallback(
     () => ({
       providerId: providerId ?? '',
       model,
+      baseUrl: baseUrl.trim() || undefined,
       apiKey: apiKey || undefined,
       dailyTokenLimit: limit ? Number(limit) : null,
     }),
-    [providerId, model, apiKey, limit],
+    [providerId, model, baseUrl, apiKey, limit],
   )
 
   const testAndSave = async () => {
     setBusy(true)
-    setStatus('正在测试连接…')
+    setStatusText('正在测试连接…')
     const test = await window.baize.wizardTest(draft())
     if (!test.ok) {
-      setStatus(`连接失败：${test.error ?? '未知错误'}`)
+      setStatusText(`连接失败：${test.error ?? '未知错误'}`)
       setBusy(false)
       return
     }
     const save = await window.baize.wizardSave(draft())
     if (!save.ok) {
-      setStatus(`保存失败：${save.error ?? '未知错误'}`)
+      setStatusText(`保存失败：${save.error ?? '未知错误'}`)
       setBusy(false)
       return
     }
-    setStatus('配置完成！点击宠物即可开始对话。')
+    setStatusText('配置完成！点击宠物即可开始对话。')
     setBusy(false)
     setTimeout(onDone, 1200)
+  }
+
+  if (!presets) {
+    return <p style={{ fontSize: 13, color: '#555' }}>{statusText || '正在加载厂商列表…'}</p>
   }
 
   if (!preset) {
     return (
       <div>
         <p style={{ fontSize: 13, color: '#555' }}>选择一个模型服务（之后也可以在设置里修改）：</p>
-        {PRESETS.map((candidate) => (
+        {presets.map((candidate) => (
           <button
             key={candidate.id}
             type="button"
@@ -152,14 +127,16 @@ function ModelWizard({ onDone }: { onDone: () => void }) {
           >
             {candidate.label}
             <span style={{ color: '#999', fontSize: 12 }}>
-              {' '}
-              · 默认模型 {candidate.defaultModel}
+              {candidate.defaultModel
+                ? ` · 默认模型 ${candidate.defaultModel}`
+                : ' · 自填地址与模型'}
             </span>
           </button>
         ))}
         <button type="button" style={{ ...buttonStyle, textAlign: 'center' }} onClick={onDone}>
           稍后再说（跳过）
         </button>
+        {statusText && <p style={{ fontSize: 12, color: '#555' }}>{statusText}</p>}
       </div>
     )
   }
@@ -193,22 +170,45 @@ function ModelWizard({ onDone }: { onDone: () => void }) {
         </button>
       )}
       <p style={{ fontSize: 13, margin: '6px 0' }}>
-        {preset.needsKey ? '第 2 步：粘贴 API key' : '本地服务无需 key'}
+        {isCustom
+          ? '第 2 步：填写服务地址与模型名（key 可选）'
+          : preset.needsKey
+            ? '第 2 步：粘贴 API key'
+            : '本地服务无需 key'}
       </p>
-      {preset.needsKey && (
+      {isCustom && (
+        <input
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          placeholder="服务地址，例如 https://api.example.com/v1"
+          style={inputStyle}
+        />
+      )}
+      {(preset.needsKey || isCustom) && (
         <input
           type="password"
           value={apiKey}
           onChange={(event) => setApiKey(event.target.value)}
-          placeholder="sk-…（只存本机，经系统钥匙串加密）"
+          placeholder={
+            canReuseKey
+              ? '留空沿用已保存的 key'
+              : isCustom
+                ? '（可选）sk-…（只存本机，经系统钥匙串加密）'
+                : 'sk-…（只存本机，经系统钥匙串加密）'
+          }
           style={inputStyle}
         />
+      )}
+      {canReuseKey && (
+        <p style={{ fontSize: 12, color: '#888', margin: '-6px 0 10px' }}>
+          已保存过该服务的 key，不重新填写即沿用。
+        </p>
       )}
       <p style={{ fontSize: 13, margin: '6px 0' }}>第 3 步：确认模型名</p>
       <input
         value={model}
         onChange={(event) => setModel(event.target.value)}
-        placeholder={preset.defaultModel}
+        placeholder={preset.defaultModel || '例如 qwen2.5-7b-instruct'}
         style={inputStyle}
       />
       <p style={{ fontSize: 13, margin: '6px 0' }}>（可选）每日 token 上限</p>
@@ -234,7 +234,7 @@ function ModelWizard({ onDone }: { onDone: () => void }) {
       >
         返回
       </button>
-      {status && <p style={{ fontSize: 12, color: '#555' }}>{status}</p>}
+      {statusText && <p style={{ fontSize: 12, color: '#555' }}>{statusText}</p>}
     </div>
   )
 }
@@ -300,6 +300,7 @@ export function SettingsApp() {
         <h2 style={{ fontSize: 14, color: '#666' }}>模型配置</h2>
         {wizardOpen ? (
           <ModelWizard
+            status={model}
             onDone={() => {
               setWizardOpen(false)
               refresh()

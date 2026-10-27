@@ -1,10 +1,13 @@
 {
   "id": "placeholder",
   "name": "小白泽（占位）",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Programmatically generated placeholder character for skeleton development.",
   "animations": {
     "idle": "animations/idle_breath.webm",
+    "idle_nap": "animations/idle_breath.webm",
+    "idle_look": "animations/idle_look.webm",
+    "idle_wiggle": "animations/idle_wiggle.webm",
     "click": "animations/click.webm",
     "drag": "animations/drag.webm"
   },
@@ -22,9 +25,38 @@
     "maxConsecutive": 2,
     "repeatPenalty": 0.5
   },
+  "scenes": [
+    {
+      "id": "idle_spontaneous",
+      "candidates": [
+        {
+          "action": "idle_nap",
+          "baseWeight": 1,
+          "emotionAffinity": { "happy": -0.4, "bored": 0.6 }
+        },
+        {
+          "action": "idle_look",
+          "baseWeight": 1.2,
+          "emotionAffinity": { "bored": 0.3 }
+        },
+        {
+          "action": "idle_wiggle",
+          "baseWeight": 0.8,
+          "emotionAffinity": { "happy": 0.5 }
+        }
+      ]
+    }
+  ],
   "lines": {
     "click": ["哎哟！", "别戳啦～", "（眯起眼睛）嗯？", "有什么事吗？"],
     "drag": ["哇——飞起来啦！", "轻一点，会晕的！", "（被拎起来的声音）"],
-    "idle_nap": ["（打了个小盹）", "（伸了个懒腰）"]
+    "idle_spontaneous": [
+      "（打了个小盹）",
+      "（伸了个懒腰）",
+      "（东张西望）那边有什么？",
+      "（歪着头看你）",
+      "（开心地扭了扭）",
+      "（原地转了个圈）"
+    ]
   }
 }
