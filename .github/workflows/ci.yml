@@ -48,13 +48,16 @@ jobs:
         run: pnpm build
       # safeStorage (key encryption) requires a usable secret backend on Linux;
       # run everything inside a dbus session with a throwaway unlocked
-      # gnome-keyring that exposes org.freedesktop.secrets.
+      # gnome-keyring that exposes org.freedesktop.secrets. Electron dlopens
+      # libsecret-1.so.0 for the gnome backend and silently falls back to
+      # basic_text when it is missing (minimal runner images lack it).
       - name: E2E smoke against out/ (dbus + keyring session)
         run: |
-          command -v gnome-keyring-daemon >/dev/null || {
+          if ! command -v gnome-keyring-daemon >/dev/null || ! ldconfig -p | grep -q libsecret-1.so.0; then
             sudo apt-get update -qq
-            sudo apt-get install -y -qq --no-install-recommends gnome-keyring dbus-x11
-          }
+            sudo apt-get install -y -qq --no-install-recommends gnome-keyring dbus-x11 libsecret-1-0
+          fi
+          ldconfig -p | grep libsecret-1.so.0 || { echo "libsecret missing" >&2; exit 1; }
           dbus-run-session -- bash -c '
             set -e
             gnome-keyring-daemon --start --components=secrets 2>&1 | sed "s/^/keyring: /"
