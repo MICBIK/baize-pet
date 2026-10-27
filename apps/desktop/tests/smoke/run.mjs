@@ -134,6 +134,12 @@ const settingsPage = await until(
 
 const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
 console.log(`user-data: ${userData}`)
+// safeStorage diagnostics: which backend did Linux select, is it usable?
+const storage = await electronApp.evaluate(({ safeStorage }) => ({
+  available: safeStorage.isEncryptionAvailable(),
+  backend: safeStorage.getSelectedStorageBackend?.() ?? 'unknown',
+}))
+console.log(`safeStorage: ${JSON.stringify(storage)}`)
 
 // --- 3. canvas alpha readback on the pet ------------------------------------
 const pixel = await until(

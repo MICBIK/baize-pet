@@ -57,11 +57,21 @@ jobs:
           }
           dbus-run-session -- bash -c '
             set -e
-            eval "$(echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock --replace --components=secrets 2>/dev/null)"
+            gnome-keyring-daemon --start --components=secrets 2>&1 | sed "s/^/keyring: /"
+            for _ in 1 2 3 4 5; do
+              sleep 1
+              if gdbus call --session --dest org.freedesktop.DBus \
+                --object-path /org/freedesktop/DBus \
+                --method org.freedesktop.DBus.ListNames | grep -q org.freedesktop.secrets; then
+                echo "org.freedesktop.secrets is on the bus"
+                break
+              fi
+            done
             gdbus call --session --dest org.freedesktop.DBus \
               --object-path /org/freedesktop/DBus \
               --method org.freedesktop.DBus.ListNames | grep -q org.freedesktop.secrets \
               || { echo "org.freedesktop.secrets not on the bus" >&2; exit 1; }
+            echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock >/dev/null
             xvfb-run -a pnpm test:smoke
           '
       - name: Collect debug artifacts on failure
