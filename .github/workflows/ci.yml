@@ -61,13 +61,15 @@ jobs:
           dbus-run-session -- bash -c '
             set -e
             # The daemon keeps its control socket under XDG_RUNTIME_DIR; the
-            # runner has no /run/user/<uid>, so provide a writable one —
-            # without it the unlock below cannot reach the daemon.
+            # runner has no /run/user/<uid>, so provide a writable one.
             export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$PWD/.xdg-runtime}"
             mkdir -p "$XDG_RUNTIME_DIR"
-            eval "$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)"
+            # Single invocation: starts the daemon (secrets component on the
+            # session bus) AND creates/unlocks the login keyring with the
+            # stdin password. Its environment lines are exported below so the
+            # Electron process can find the control socket too.
+            eval "$(echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets 2>/dev/null)"
             echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL"
-            echo -n "baize-ci-keyring" | gnome-keyring-daemon --unlock 2>&1 | sed "s/^/unlock: /"
             for _ in 1 2 3 4 5; do
               sleep 1
               if gdbus call --session --dest org.freedesktop.DBus \
