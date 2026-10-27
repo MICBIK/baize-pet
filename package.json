@@ -17,6 +17,7 @@
     "build": "pnpm -r --filter '!@baize/desktop' run build && pnpm --filter @baize/desktop build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:smoke": "node apps/desktop/tests/smoke/run.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -27,6 +28,7 @@
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^5.0.5",
     "mediabunny": "1.62.1",
+    "playwright-core": "^1.64.1",
     "typescript": "^5.9.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
