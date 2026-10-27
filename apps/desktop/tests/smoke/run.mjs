@@ -138,9 +138,12 @@ const settingsPage = await until(
 const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
 console.log(`user-data: ${userData}`)
 // safeStorage diagnostics: which backend did Linux select, is it usable?
-const storage = await electronApp.evaluate(({ safeStorage }) => ({
+const storage = await electronApp.evaluate(({ app, safeStorage }) => ({
   available: safeStorage.isEncryptionAvailable(),
   backend: safeStorage.getSelectedStorageBackend?.() ?? 'unknown',
+  passwordStoreSwitch: app.commandLine.hasSwitch('password-store')
+    ? app.commandLine.getSwitchValue('password-store')
+    : '(absent)',
 }))
 console.log(`safeStorage: ${JSON.stringify(storage)}`)
 
