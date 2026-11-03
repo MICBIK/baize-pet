@@ -20,9 +20,9 @@
     { "id": "eye-R", "box": [440, 350, 540, 425], "points": [[490, 385]], "subtract": [] },
     { "id": "iris-L", "box": [335, 365, 400, 415], "points": [[368, 388]], "subtract": [], "from": "eye-L" },
     { "id": "iris-R", "box": [455, 365, 520, 415], "points": [[488, 388]], "subtract": [], "from": "eye-R" },
-    { "id": "mouth", "box": [400, 442, 458, 470], "points": [[428, 455]], "subtract": [], "method": "color-mouth" },
+    { "id": "mouth", "box": [402, 443, 456, 468], "points": [[428, 452]], "subtract": [] },
     { "id": "face", "box": [280, 240, 570, 500], "points": [[430, 300]], "subtract": ["eye-L", "eye-R", "mouth", "bangs", "blush", "iris-L", "iris-R"], "method": "color-face" },
     { "id": "hood", "box": [165, 60, 700, 520], "points": [[430, 100]], "subtract": ["ear-L", "ear-R", "horn-L", "horn-R", "third-eye", "face", "bangs", "string-L", "string-R"] },
-    { "id": "blush", "box": [300, 420, 560, 465], "points": [[330, 445], [530, 445]], "subtract": [] }
+    { "id": "blush", "box": [300, 420, 560, 465], "points": [[330, 445], [530, 445]], "subtract": [], "method": "color-blush" }
   ]
 }

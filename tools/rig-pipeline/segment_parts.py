@@ -75,15 +75,19 @@ def iris_from_eye(master, eye_mask, box):
 
 
 def color_face(master, box):
-    """Flat skin tones inside the face box: Lab B >= 135 separates skin from
-    the cooler white hood/hair (B ~128-132). Measured on master samples."""
+    """Flat skin tones inside the face box: Lab B >= 133 separates skin from
+    the cooler white hood/hair (B ~128-132). Close(5) consolidates shading
+    speckle; the nearest-part pass afterwards reclaims any seams."""
     lab = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2LAB)
     L = lab[..., 0].astype(int)
     B = lab[..., 2].astype(int)
     x0, y0, x1, y1 = [int(v) for v in box]
     sel = np.zeros(L.shape, bool)
     sel[y0:y1, x0:x1] = True
-    return ((B >= 135) & (L >= 190) & sel & (master[..., 3] > 128)).astype(np.uint8)
+    m = ((B >= 133) & (L >= 185) & sel & (master[..., 3] > 128)).astype(np.uint8)
+    k = np.ones((5, 5), np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, k)
+    return m
 
 
 def color_mouth(master, box):
@@ -95,6 +99,18 @@ def color_mouth(master, box):
     sel = np.zeros(L.shape, bool)
     sel[y0:y1, x0:x1] = True
     return ((L < 195) & (B >= 115) & sel & (master[..., 3] > 128)).astype(np.uint8)
+
+
+def color_blush(master, box):
+    """Two blush ellipses (task book A6 allows programmatic blush): centred on
+    each cheek, intersected with the silhouette."""
+    x0, y0, x1, y1 = [int(v) for v in box]
+    yy, xx = np.ogrid[: master.shape[0], : master.shape[1]]
+    m = np.zeros(master.shape[:2], bool)
+    for cx in (x0 + 25, x1 - 25):
+        cy = (y0 + y1) // 2
+        m |= ((xx - cx) / 22.0) ** 2 + ((yy - cy) / 12.0) ** 2 <= 1.0
+    return (m & (master[..., 3] > 128)).astype(np.uint8)
 
 
 def main():
@@ -123,6 +139,8 @@ def main():
             raw = color_face(master, box)
         elif method == 'color-mouth':
             raw = color_mouth(master, box)
+        elif method == 'color-blush':
+            raw = color_blush(master, box)
         elif part.get('from'):
             raw = iris_from_eye(master, masks.get(part['from'], np.zeros_like(raw)), box)
         cleaned = clean_mask(raw, box)
