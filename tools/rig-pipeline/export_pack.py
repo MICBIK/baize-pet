@@ -139,6 +139,19 @@ def main():
             entry['opacityParam'] = meta['opacityParam']
         rig['parts'].append(entry)
 
+    # A6 arm slots extracted from registered variants (extract_arm_slots.py):
+    # slot PNGs copy into rig/parts and the {image,x,y} objects merge into the
+    # part entries. Families that failed isolation stay absent (F4 fallback).
+    slots_file = ART / 'slots.json'
+    if slots_file.exists():
+        slots = json.loads(slots_file.read_text(encoding='utf-8'))
+        for slot_png in sorted((ART / 'slots').glob('arm-*.png')):
+            shutil.copy(slot_png, PACK / 'rig' / 'parts' / slot_png.name)
+        for entry in rig['parts']:
+            extra = slots.get(entry['id'])
+            if extra:
+                entry.setdefault('slots', {}).update(extra)
+
     # Copy clips + expressions produced by make-clips.cjs.
     clips_src = ART / 'clips-out'
     (PACK / 'rig' / 'clips').mkdir(parents=True, exist_ok=True)
