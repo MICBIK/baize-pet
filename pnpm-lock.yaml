@@ -65,6 +65,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@baize/rig':
+        specifier: workspace:*
+        version: link:../rig
       '@baize/shared':
         specifier: workspace:*
         version: link:../shared

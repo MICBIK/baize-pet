@@ -15,6 +15,8 @@ export const IpcChannel = {
   petGetCharacter: 'pet:get-character',
   /** Main -> renderer: play an action (spontaneous behavior). */
   petAction: 'pet:action',
+  /** Main -> renderer: cursor position in pet-window coords (20 Hz, transient). */
+  petCursor: 'pet:cursor',
   /** Main -> renderer: show a speech bubble. */
   petSay: 'pet:say',
   settingsOpen: 'settings:open',
@@ -42,11 +44,19 @@ export const IpcChannel = {
 } as const
 
 /** Animation map of a character pack, as delivered to the renderer. */
+/** Renderer kind of a character pack. */
+export type RendererKind = 'video' | 'rig'
+
+/** Animation map of a character pack, as delivered to the renderer. */
 export interface CharacterInfo {
   /** Pack identifier (directory name). */
   id: string
   /** Action name -> pack-relative animation file path (e.g. "animations/idle.webm"). */
   animations: Record<PetActionName, string>
+  /** Renderer selected by the manifest (default "video"). */
+  renderer: RendererKind
+  /** rig.json pack-relative path when renderer is "rig". */
+  rig?: string
 }
 
 /** Persisted application configuration (userData/config.json). */

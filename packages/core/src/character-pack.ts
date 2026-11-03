@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { isSafePackRelPath } from '@baize/rig'
 import { z } from 'zod'
 import type { EmotionParams } from './emotion'
+
+/** Light structural view of rig.json used for pack validation. */
+interface RigManifestData {
+  clips?: unknown
+  parts?: unknown
+}
 
 /** Zod schema for a character pack manifest (see docs/03 §3.1). */
 export const EmotionRatesSchema = z.object({
@@ -61,6 +68,15 @@ export const CharacterManifestSchema = z.object({
   name: z.string().min(1),
   version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+].*)?$/, 'must be semver'),
   description: z.string().optional(),
+  /** Renderer kind: "video" (webm, default) or "rig" (layered parts). */
+  renderer: z.enum(['video', 'rig']).default('video'),
+  /** rig.json path relative to the pack root; required when renderer is "rig". */
+  rig: z.string().optional(),
+  /**
+   * Action name -> animation. Three value forms: "rig:<clip>" (rig clip),
+   * "sprite:<sheet>" (atlas sheet in sprites/sprites.json) or a plain
+   * pack-relative file path (video renderer).
+   */
   animations: z
     .record(z.string().min(1), z.string().min(1))
     .refine((animations) => 'idle' in animations, { message: 'the "idle" animation is required' }),
@@ -139,8 +155,61 @@ export function loadCharacterPack(dir: string): LoadedCharacterPack {
     )
   }
 
+  // Rig packs: rig.json must exist and referenced assets must stay inside.
+  let rigData: RigManifestData | null = null
+  if (parsed.data.renderer === 'rig') {
+    if (!parsed.data.rig) {
+      throw new CharacterPackError(`Rig pack is missing the "rig" field: ${packDir}`)
+    }
+    if (!isSafePackRelPath(parsed.data.rig)) {
+      throw new CharacterPackError(`rig path is unsafe: ${parsed.data.rig}`)
+    }
+    const rigPath = resolve(packDir, parsed.data.rig)
+    if (!rigPath.startsWith(packDir)) {
+      throw new CharacterPackError(`rig path escapes the pack directory: ${parsed.data.rig}`)
+    }
+    try {
+      rigData = JSON.parse(readFileSync(rigPath, 'utf8')) as RigManifestData
+    } catch {
+      throw new CharacterPackError(`rig.json is missing or not valid JSON: ${rigPath}`)
+    }
+  }
+
   const files = listAnimationFiles(packDir)
+  const spritesJsonPath = join(packDir, 'sprites', 'sprites.json')
+  let spriteStates: { states?: Record<string, unknown> } | null = null
+  const readSpriteStates = (): { states?: Record<string, unknown> } => {
+    if (spriteStates) return spriteStates
+    if (!existsSync(spritesJsonPath)) {
+      throw new CharacterPackError(`sprite: animation requires sprites/sprites.json: ${packDir}`)
+    }
+    spriteStates = JSON.parse(readFileSync(spritesJsonPath, 'utf8')) as {
+      states?: Record<string, unknown>
+    }
+    return spriteStates
+  }
+
   for (const [action, file] of Object.entries(parsed.data.animations)) {
+    if (file.startsWith('rig:')) {
+      if (parsed.data.renderer !== 'rig') {
+        throw new CharacterPackError(`rig: animation for "${action}" requires renderer "rig"`)
+      }
+      const clipName = file.slice(4)
+      if (!/^[A-Za-z0-9._-]+$/.test(clipName)) {
+        throw new CharacterPackError(`rig: clip name for "${action}" is unsafe: ${file}`)
+      }
+      continue // existence checked below against rigData.clips
+    }
+    if (file.startsWith('sprite:')) {
+      const sheet = file.slice(7)
+      const states = readSpriteStates().states ?? {}
+      if (!(sheet in states)) {
+        throw new CharacterPackError(
+          `sprite: sheet "${sheet}" (action "${action}") is not in sprites.json`,
+        )
+      }
+      continue
+    }
     const animationPath = resolve(packDir, file)
     if (!animationPath.startsWith(packDir)) {
       throw new CharacterPackError(
@@ -149,6 +218,43 @@ export function loadCharacterPack(dir: string): LoadedCharacterPack {
     }
     if (!files.has(animationPath)) {
       throw new CharacterPackError(`Animation file for "${action}" does not exist: ${file}`)
+    }
+  }
+
+  // Rig asset checks: clips exist, images exist, no path escapes.
+  if (rigData) {
+    const rigDir = resolve(packDir, parsed.data.rig ? dirname(parsed.data.rig) : '.')
+    const declaredClips = new Set(
+      Array.isArray(rigData.clips) ? rigData.clips.map((c) => basename(String(c))) : [],
+    )
+    for (const [action, file] of Object.entries(parsed.data.animations)) {
+      if (!file.startsWith('rig:')) continue
+      const clipName = file.slice(4)
+      if (!declaredClips.has(`${clipName}.json`)) {
+        throw new CharacterPackError(
+          `rig: clip "${clipName}" (action "${action}") is not declared in rig.json`,
+        )
+      }
+    }
+    const images: string[] = []
+    for (const part of Array.isArray(rigData.parts) ? rigData.parts : []) {
+      const p = part as { image?: unknown; slots?: Record<string, { image?: unknown }> }
+      if (typeof p.image === 'string') images.push(p.image)
+      for (const slot of Object.values(p.slots ?? {})) {
+        if (typeof slot?.image === 'string') images.push(slot.image)
+      }
+    }
+    for (const image of images) {
+      if (!isSafePackRelPath(image)) {
+        throw new CharacterPackError(`rig part image path is unsafe: ${image}`)
+      }
+      const imagePath = resolve(rigDir, image)
+      if (!imagePath.startsWith(packDir)) {
+        throw new CharacterPackError(`rig part image escapes the pack directory: ${image}`)
+      }
+      if (!files.has(imagePath)) {
+        throw new CharacterPackError(`rig part image does not exist: ${image}`)
+      }
     }
   }
 
