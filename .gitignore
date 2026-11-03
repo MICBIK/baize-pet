@@ -20,3 +20,4 @@ demo/
 *.dmg
 # Previous webm pack (superseded by characters/baize-b3); keep local, never commit
 characters/b3/
+__pycache__/
