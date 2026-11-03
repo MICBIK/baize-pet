@@ -31,6 +31,15 @@ const api = {
       ipcRenderer.removeListener(IpcChannel.petAction, handler)
     }
   },
+  /** Main -> renderer: OS cursor in pet-window coords at 20 Hz (transient, not stored). */
+  onCursor: (callback: (point: { x: number; y: number }) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, point: { x: number; y: number }): void =>
+      callback(point)
+    ipcRenderer.on(IpcChannel.petCursor, handler)
+    return () => {
+      ipcRenderer.removeListener(IpcChannel.petCursor, handler)
+    }
+  },
   /** Main -> renderer: show a speech bubble line. */
   onSay: (callback: (line: string) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, line: string): void => callback(line)

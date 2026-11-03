@@ -159,3 +159,22 @@ export function petRendererUrl(): { url: string; isDev: boolean } {
   }
   return { url: join(__dirname, '../renderer/index.html'), isDev: false }
 }
+
+/**
+ * Push the OS cursor to the pet renderer at 20 Hz in window coordinates
+ * while the window is visible and DND is off (task book C). Transient data:
+ * never persisted, never logged.
+ */
+export function startCursorPush(
+  getWindow: () => BrowserWindow | null,
+  isDnd: () => boolean,
+): NodeJS.Timeout {
+  return setInterval(() => {
+    const win = getWindow()
+    if (!win || win.isDestroyed() || !win.isVisible()) return
+    if (isDnd()) return
+    const p = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+    win.webContents.send(IpcChannel.petCursor, { x: p.x - b.x, y: p.y - b.y })
+  }, 50)
+}

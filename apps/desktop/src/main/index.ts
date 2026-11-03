@@ -19,10 +19,10 @@ import { ChatService, type WizardDraft } from './chat-service'
 import { ConfigStore } from './config'
 import { createAppMemory } from './memory'
 import { registerMemoryIpc } from './memory-ipc'
-import { createPetWindow, petRendererUrl, registerPetIpc } from './pet-window'
+import { createPetWindow, petRendererUrl, registerPetIpc, startCursorPush } from './pet-window'
 import { createTray } from './tray'
 
-const BUILT_IN_PACK_ID = 'placeholder'
+const BUILT_IN_PACK_ID = 'b3'
 
 // Custom scheme serving character pack files to the renderer (media-src in the CSP).
 // standard/secure/corsEnabled are required so <video> frames stay untainted for the
@@ -157,6 +157,11 @@ app
         if (line) petWindow.webContents.send(IpcChannel.petSay, line)
       },
     )
+    // 20 Hz cursor feed for the rig renderer's gaze following (transient).
+    startCursorPush(
+      () => (petWindow.isDestroyed() ? null : petWindow),
+      () => config.get().dnd,
+    )
 
     ipcMain.on(IpcChannel.petClick, () => {
       const line = brain.onInteraction('click')
@@ -220,6 +225,7 @@ app
           petWindow.hide()
         } else {
           petWindow.show()
+          petWindow.webContents.send(IpcChannel.petAction, 'wave')
         }
       },
       openSettings,
@@ -234,6 +240,16 @@ app
     } else {
       void petWindow.loadFile(url)
     }
+
+    // Greet with a wave once the pet renderer is up (falls back to idle in the
+    // renderer when the pack has no "wave" animation).
+    petWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        if (petWindow.isVisible() && !config.get().dnd) {
+          petWindow.webContents.send(IpcChannel.petAction, 'wave')
+        }
+      }, 1500)
+    })
 
     // First launch: the model wizard appears automatically (docs/07 M4).
     if (!config.get().wizardDone) {
