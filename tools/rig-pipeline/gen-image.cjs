@@ -165,11 +165,15 @@ async function curlEdits({ prompt, refs, dest, size, mask }) {
     throw e
   }
   if (!validPng(dest)) {
-    // Bad/absent alpha: delete so a retry starts clean, then treat as transient.
+    // Bad/absent alpha: KEEP the file (renamed *.reject) for diagnosis instead
+    // of deleting it — a billed-but-rejected response must stay inspectable.
+    let why = 'not a PNG'
     try {
-      fs.unlinkSync(dest)
+      const head = fs.readFileSync(dest).subarray(0, 8)
+      if (head.equals(PNG_MAGIC)) why = 'PNG without alpha channel'
+      fs.renameSync(dest, `${dest}.reject`)
     } catch {}
-    const e = new Error('no alpha channel (checkerboard or solid bg)')
+    const e = new Error(`${why} -> kept ${dest}.reject for inspection`)
     e.transient = true
     throw e
   }
