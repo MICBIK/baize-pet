@@ -1,0 +1,28 @@
+{
+  "note": "SAM box/point prompts in master.png pixel coordinates (854x1188). 'subtract' lists part ids whose masks are cut out of this part after segmentation (upper layers removed from lower layers).",
+  "parts": [
+    { "id": "tail", "box": [560, 770, 700, 890], "points": [[630, 820]], "subtract": [] },
+    { "id": "leg-L", "box": [300, 850, 420, 1090], "points": [[350, 930]], "subtract": [] },
+    { "id": "leg-R", "box": [430, 850, 560, 1090], "points": [[480, 930]], "subtract": [] },
+    { "id": "shorts", "box": [290, 730, 570, 870], "points": [[430, 800]], "subtract": ["leg-L", "leg-R"] },
+    { "id": "string-L", "box": [360, 480, 430, 640], "points": [[392, 540]], "subtract": [] },
+    { "id": "string-R", "box": [430, 480, 500, 640], "points": [[462, 540]], "subtract": [] },
+    { "id": "arm-L", "box": [200, 480, 340, 770], "points": [[270, 600]], "subtract": ["torso"] },
+    { "id": "arm-R", "box": [515, 480, 650, 770], "points": [[580, 600]], "subtract": ["torso"] },
+    { "id": "torso", "box": [230, 470, 630, 750], "points": [[430, 600]], "subtract": ["string-L", "string-R", "arm-L", "arm-R", "shorts"] },
+    { "id": "horn-L", "box": [300, 60, 380, 150], "points": [[335, 100]], "subtract": [] },
+    { "id": "horn-R", "box": [510, 60, 590, 150], "points": [[552, 100]], "subtract": [] },
+    { "id": "ear-L", "box": [170, 100, 310, 270], "points": [[230, 170]], "subtract": [] },
+    { "id": "ear-R", "box": [590, 100, 700, 270], "points": [[645, 170]], "subtract": [] },
+    { "id": "third-eye", "box": [380, 120, 500, 195], "points": [[437, 155]], "subtract": [] },
+    { "id": "bangs", "box": [285, 235, 565, 365], "points": [[430, 280]], "subtract": [] },
+    { "id": "eye-L", "box": [320, 350, 420, 425], "points": [[370, 385]], "subtract": [] },
+    { "id": "eye-R", "box": [440, 350, 540, 425], "points": [[490, 385]], "subtract": [] },
+    { "id": "iris-L", "box": [335, 365, 400, 415], "points": [[368, 388]], "subtract": [], "from": "eye-L" },
+    { "id": "iris-R", "box": [455, 365, 520, 415], "points": [[488, 388]], "subtract": [], "from": "eye-R" },
+    { "id": "mouth", "box": [400, 442, 458, 470], "points": [[428, 455]], "subtract": [], "method": "color-mouth" },
+    { "id": "face", "box": [280, 240, 570, 500], "points": [[430, 300]], "subtract": ["eye-L", "eye-R", "mouth", "bangs", "blush", "iris-L", "iris-R"], "method": "color-face" },
+    { "id": "hood", "box": [165, 60, 700, 520], "points": [[430, 100]], "subtract": ["ear-L", "ear-R", "horn-L", "horn-R", "third-eye", "face", "bangs", "string-L", "string-R"] },
+    { "id": "blush", "box": [300, 420, 560, 465], "points": [[330, 445], [530, 445]], "subtract": [] }
+  ]
+}
