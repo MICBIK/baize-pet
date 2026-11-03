@@ -79,6 +79,19 @@ describe('action requests', () => {
     expect(sm.idleName).toBe('idle-happy')
     expect(sm.isBusy).toBe(false)
   })
+
+  it('base-layer requests switch the idle instead of stacking an action', () => {
+    const sm = machine([
+      clip({ name: 'idle-happy', loop: true, duration: 1600, layer: 'base', tracks: {} }),
+    ])
+    sm.request('idle-happy', 0)
+    expect(sm.currentActionName).toBe('idle-happy')
+    expect(sm.isBusy).toBe(false) // base layer: no action stack
+    // A one-shot after it returns to the switched base idle.
+    sm.request('wave', 500)
+    sm.update(1600, 16, new Map()) // wave (1000 ms) has finished
+    expect(sm.currentActionName).toBe('idle-happy')
+  })
 })
 
 describe('expressions and say', () => {

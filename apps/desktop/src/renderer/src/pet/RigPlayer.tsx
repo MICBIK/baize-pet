@@ -23,6 +23,7 @@ import {
 } from '@baize/rig'
 import type { CharacterInfo } from '@baize/shared'
 import { useEffect, useRef } from 'react'
+import { SpritePlayer } from './SpritePlayer'
 import { packUrl } from './VideoPlayer'
 
 interface RigResources {
@@ -158,6 +159,9 @@ export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.info.id, props.info, props.onLoaded])
 
+  // The frame loop intentionally runs once: action/say/cursor arrive via
+  // refs and the animation clock must not reset on re-render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: single rAF loop reading props through refs
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -177,6 +181,12 @@ export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
     let raf = 0
     let lastSeq = -1
     let requestedAction = props.action
+    let spriteMode = false
+    let activeSheet: string | null = null
+    let spriteStartMs = 0
+    let fadeSnap: HTMLCanvasElement | null = null
+    let fadeUntil = 0
+    const spritePlayers = new Map<string, SpritePlayer>()
 
     const frame = (now: number): void => {
       raf = requestAnimationFrame(frame)
@@ -228,22 +238,88 @@ export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
       }
 
       const out = state.update(clock, dt, res.expressions)
-      // The state machine already mixed base/action/expression; stack the
-      // procedural life and spring physics on top.
-      const params = mixLayers({ base: out.params, procedural: proc.params, physics })
-      const parts = solve(res.manifest, params)
-      drawParts(ctx, res, parts, dpr, size)
+
+      // --- render: sprite sheet or rig parts ---------------------------------
+      const animFile = props.info.animations[actionRef.current] ?? ''
+      let sheetName =
+        animFile.startsWith('sprite:') && res.spriteMeta && res.spriteImages.has(animFile.slice(7))
+          ? animFile.slice(7)
+          : null
+      // One-shot sprite states chain into their follow-up (sit -> sit-idle).
+      if (
+        sheetName &&
+        res.spriteMeta &&
+        clock - spriteStartMs > spriteTotalMs(res.spriteMeta, sheetName) &&
+        !res.spriteMeta.states[sheetName]?.loop
+      ) {
+        const follow = SPRITE_FOLLOW[actionRef.current]
+        if (follow && res.spriteMeta.states[follow]) {
+          sheetName = follow
+        }
+      }
+      const useSprite = sheetName !== null
+      if (useSprite !== spriteMode || (sheetName && sheetName !== activeSheet)) {
+        // Mode or sheet switch: snapshot the canvas for the 150 ms crossfade.
+        const snap = document.createElement('canvas')
+        snap.width = canvas.width
+        snap.height = canvas.height
+        snap.getContext('2d')?.drawImage(canvas, 0, 0)
+        fadeSnap = snap
+        fadeUntil = clock + 150
+        spriteMode = useSprite
+        activeSheet = sheetName
+        spriteStartMs = clock
+      }
+
+      if (useSprite && sheetName && res.spriteMeta) {
+        const img = res.spriteImages.get(sheetName)
+        if (img) {
+          let sp = spritePlayers.get(sheetName)
+          if (!sp) {
+            sp = new SpritePlayer(img, res.spriteMeta)
+            spritePlayers.set(sheetName, sp)
+          }
+          sp.play(sheetName, clock)
+          ctx.setTransform(dpr * (size / 256), 0, 0, dpr * (size / 256), 0, 0)
+          sp.draw(ctx, clock)
+        }
+      } else {
+        // The state machine already mixed base/action/expression; stack the
+        // procedural life and spring physics on top.
+        const params = mixLayers({ base: out.params, procedural: proc.params, physics })
+        const parts = solve(res.manifest, params)
+        drawParts(ctx, res, parts, dpr, size)
+      }
+
+      // Crossfade overlay: previous pose fades out on top.
+      if (fadeSnap && clock < fadeUntil) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalAlpha = Math.min(1, (fadeUntil - clock) / 150)
+        ctx.drawImage(fadeSnap, 0, 0)
+        ctx.globalAlpha = 1
+      }
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.action])
+  }, [])
 
   return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
 }
 
 function clampLook(v: number): number {
   return Math.min(1, Math.max(-1, v))
+}
+
+/** Sprite states that follow a finished one-shot (task book D: sit chain). */
+const SPRITE_FOLLOW: Record<string, string> = { sit: 'sit-idle' }
+
+function spriteTotalMs(
+  meta: { states: Record<string, { durations: number[]; loop: boolean }> },
+  name: string,
+): number {
+  const st = meta.states[name]
+  return st ? st.durations.reduce((a, b) => a + b, 0) : Number.POSITIVE_INFINITY
 }
 
 /**

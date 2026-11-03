@@ -42,6 +42,8 @@ export class RigStateMachine {
   private readonly clips: Map<string, Clip>
   private readonly config: StateMachineConfig
   private emotion = 'neutral'
+  /** Current base-layer idle override (task book D2 emotion idles). */
+  private baseName: string | null = null
   private action: ActiveAction | null = null
   private actionPrevT = 0
   private lastRequest: { name: string; atMs: number } | null = null
@@ -59,7 +61,7 @@ export class RigStateMachine {
 
   /** Current action name (the emotion idle when no action is active). */
   get currentActionName(): string {
-    return this.action?.clip.name ?? this.idleName
+    return this.action?.clip.name ?? this.baseName ?? this.idleName
   }
 
   /** The idle action for the current emotion. */
@@ -92,8 +94,19 @@ export class RigStateMachine {
   /**
    * Request an action (task book D4): the same name within 3 s only resets
    * the expression instead of restarting the clip (anti-jitter guard).
+   * Base-layer clips (emotion idles) switch the base loop instead of
+   * stacking an action (task book D2).
    */
   request(name: string, nowMs: number): void {
+    const clip = this.clips.get(name)
+    if (!clip) return
+    if (clip.layer === 'base') {
+      if (this.baseName === name) return
+      this.baseName = name
+      this.action = null
+      this.lastRequest = { name, atMs: nowMs }
+      return
+    }
     if (
       this.lastRequest &&
       this.lastRequest.name === name &&
@@ -101,8 +114,6 @@ export class RigStateMachine {
     ) {
       return
     }
-    const clip = this.clips.get(name)
-    if (!clip) return
     this.action = { clip, startMs: nowMs }
     this.actionPrevT = nowMs
     this.lastRequest = { name, atMs: nowMs }
@@ -161,7 +172,7 @@ export class RigStateMachine {
     }
 
     // Base layer: the emotion idle always runs.
-    const idleClip = this.clips.get(this.idleName)
+    const idleClip = this.clips.get(this.baseName ?? this.idleName)
     const baseParams = idleClip ? evalClip(idleClip, nowMs) : {}
 
     // Expression: an action-declared preset shows while the action runs;
