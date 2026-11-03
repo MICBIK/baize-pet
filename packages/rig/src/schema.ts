@@ -6,7 +6,7 @@
  * no file IO; the app layer owns reading files from the character pack.
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 export const EASINGS = [
   'linear',
@@ -19,13 +19,13 @@ export const EASINGS = [
   'easeOutBack',
   'easeOutElastic',
   'step',
-] as const;
-export type Easing = (typeof EASINGS)[number];
+] as const
+export type Easing = (typeof EASINGS)[number]
 
-export const RigPointSchema = z.tuple([z.number(), z.number()]);
-export type RigPoint = [number, number];
+export const RigPointSchema = z.tuple([z.number(), z.number()])
+export type RigPoint = [number, number]
 
-const SlotImageSchema = z.object({ image: z.string().min(1), x: z.number(), y: z.number() });
+const SlotImageSchema = z.object({ image: z.string().min(1), x: z.number(), y: z.number() })
 
 export const RigPartSchema = z.object({
   id: z.string().min(1),
@@ -40,39 +40,47 @@ export const RigPartSchema = z.object({
   opacityParam: z.string().optional(),
   /** Blend mode; "lighter" for additive glows. */
   blend: z.enum(['normal', 'lighter']).optional(),
-});
-export type RigPart = z.infer<typeof RigPartSchema>;
+})
+export type RigPart = z.infer<typeof RigPartSchema>
 
 export const RigGroupSchema = z.object({
   parent: z.string().optional(),
   pivot: RigPointSchema,
-});
-export type RigGroup = z.infer<typeof RigGroupSchema>;
+})
+export type RigGroup = z.infer<typeof RigGroupSchema>
 
-export const RigFxSchema = z.object({ image: z.string().min(1), anchor: RigPointSchema });
+export const RigFxSchema = z.object({ image: z.string().min(1), anchor: RigPointSchema })
 
 export const RigManifestSchema = z.object({
   version: z.literal(1),
-  master: z.object({ width: z.number().positive(), height: z.number().positive(), scale: z.number().positive() }),
-  anchor: z.object({ hoodWidth: z.number().positive(), groundY: z.number().positive(), centerX: z.number() }),
+  master: z.object({
+    width: z.number().positive(),
+    height: z.number().positive(),
+    scale: z.number().positive(),
+  }),
+  anchor: z.object({
+    hoodWidth: z.number().positive(),
+    groundY: z.number().positive(),
+    centerX: z.number(),
+  }),
   parts: z.array(RigPartSchema),
   groups: z.record(z.string(), RigGroupSchema),
   fx: z.record(z.string(), RigFxSchema).optional(),
   clips: z.array(z.string().min(1)).optional(),
   expressions: z.string().optional(),
-});
-export type RigManifest = z.infer<typeof RigManifestSchema>;
+})
+export type RigManifest = z.infer<typeof RigManifestSchema>
 
 /** One keyframe: [timeMs, value, easing?]. Enum values switch by step. */
 export const KeyframeSchema = z.tuple([
   z.number().nonnegative(),
   z.union([z.number(), z.string()]),
   z.enum(EASINGS).optional(),
-]);
-export type Keyframe = z.infer<typeof KeyframeSchema>;
+])
+export type Keyframe = z.infer<typeof KeyframeSchema>
 
-export const ClipLayerSchema = z.enum(['base', 'action']);
-export type ClipLayer = z.infer<typeof ClipLayerSchema>;
+export const ClipLayerSchema = z.enum(['base', 'action'])
+export type ClipLayer = z.infer<typeof ClipLayerSchema>
 
 export const ClipSchema = z.object({
   name: z.string().min(1),
@@ -85,31 +93,31 @@ export const ClipSchema = z.object({
   /** [timeMs, "say:<key>" | future event kinds]. */
   events: z.array(z.tuple([z.number(), z.string()])).optional(),
   next: z.string().nullable().optional(),
-});
-export type Clip = z.infer<typeof ClipSchema>;
+})
+export type Clip = z.infer<typeof ClipSchema>
 
 export const ExpressionPresetSchema = z.object({
   name: z.string().min(1),
   params: z.record(z.string(), z.union([z.number(), z.string()])),
-});
-export type ExpressionPreset = z.infer<typeof ExpressionPresetSchema>;
+})
+export type ExpressionPreset = z.infer<typeof ExpressionPresetSchema>
 
 export const ExpressionsFileSchema = z.object({
   expressions: z.array(ExpressionPresetSchema),
-});
-export type ExpressionsFile = z.infer<typeof ExpressionsFileSchema>;
+})
+export type ExpressionsFile = z.infer<typeof ExpressionsFileSchema>
 
 /** Parse a rig.json payload; throws a descriptive error when invalid. */
 export function parseRigManifest(data: unknown): RigManifest {
-  return RigManifestSchema.parse(data);
+  return RigManifestSchema.parse(data)
 }
 
 export function parseClip(data: unknown): Clip {
-  return ClipSchema.parse(data);
+  return ClipSchema.parse(data)
 }
 
 export function parseExpressions(data: unknown): ExpressionsFile {
-  return ExpressionsFileSchema.parse(data);
+  return ExpressionsFileSchema.parse(data)
 }
 
 /**
@@ -117,36 +125,40 @@ export function parseExpressions(data: unknown): ExpressionsFile {
  * and contain no cycles. Returns a list of human-readable problems.
  */
 export function validateRigGraph(rig: RigManifest): string[] {
-  const problems: string[] = [];
-  const nodeIds = new Set<string>(['body', ...rig.groups ? Object.keys(rig.groups) : [], ...rig.parts.map((p) => p.id)]);
+  const problems: string[] = []
+  const nodeIds = new Set<string>([
+    'body',
+    ...(rig.groups ? Object.keys(rig.groups) : []),
+    ...rig.parts.map((p) => p.id),
+  ])
 
-  const parentOf = new Map<string, string>();
+  const parentOf = new Map<string, string>()
   for (const [id, g] of Object.entries(rig.groups)) {
-    if (g.parent) parentOf.set(id, g.parent);
+    if (g.parent) parentOf.set(id, g.parent)
   }
   for (const p of rig.parts) {
-    if (p.parent) parentOf.set(p.id, p.parent);
+    if (p.parent) parentOf.set(p.id, p.parent)
   }
 
   for (const [id, parent] of parentOf) {
     if (!nodeIds.has(parent)) {
-      problems.push(`"${id}" references missing parent "${parent}"`);
+      problems.push(`"${id}" references missing parent "${parent}"`)
     }
   }
 
   for (const id of nodeIds) {
-    const seen = new Set<string>([id]);
-    let cur = parentOf.get(id);
+    const seen = new Set<string>([id])
+    let cur = parentOf.get(id)
     while (cur !== undefined) {
       if (seen.has(cur)) {
-        problems.push(`cycle detected at "${id}"`);
-        break;
+        problems.push(`cycle detected at "${id}"`)
+        break
       }
-      seen.add(cur);
-      cur = parentOf.get(cur);
+      seen.add(cur)
+      cur = parentOf.get(cur)
     }
   }
-  return problems;
+  return problems
 }
 
 /**
@@ -154,7 +166,8 @@ export function validateRigGraph(rig: RigManifest): string[] {
  * or scheme paths. The app layer additionally checks existence on disk.
  */
 export function isSafePackRelPath(p: string): boolean {
-  if (!p || p.startsWith('/') || p.includes('\\') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p)) return false;
-  if (p.split('/').includes('..')) return false;
-  return true;
+  if (!p || p.startsWith('/') || p.includes('\\') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p))
+    return false
+  if (p.split('/').includes('..')) return false
+  return true
 }

@@ -7,10 +7,10 @@
  * value. Angles are degrees; distances are pet-window pixels (256 scale).
  */
 
-export type ParamValue = number | string;
+export type ParamValue = number | string
 
 /** Flat parameter map keyed by dotted name, e.g. "body.squash". */
-export type RigParams = Record<string, ParamValue>;
+export type RigParams = Record<string, ParamValue>
 
 export const EYE_SLOTS = [
   'open',
@@ -27,8 +27,8 @@ export const EYE_SLOTS = [
   'focus',
   'look-up',
   'wink',
-] as const;
-export type EyeSlot = (typeof EYE_SLOTS)[number];
+] as const
+export type EyeSlot = (typeof EYE_SLOTS)[number]
 
 export const MOUTH_SLOTS = [
   'smile',
@@ -42,18 +42,28 @@ export const MOUTH_SLOTS = [
   'wobbly',
   'grin',
   'puff',
-] as const;
-export type MouthSlot = (typeof MOUTH_SLOTS)[number];
+] as const
+export type MouthSlot = (typeof MOUTH_SLOTS)[number]
 
-export const ARM_SLOTS = ['down', 'wave', 'up', 'chin', 'hold', 'cover', 'rub', 'head', 'out'] as const;
-export type ArmSlot = (typeof ARM_SLOTS)[number];
+export const ARM_SLOTS = [
+  'down',
+  'wave',
+  'up',
+  'chin',
+  'hold',
+  'cover',
+  'rub',
+  'head',
+  'out',
+] as const
+export type ArmSlot = (typeof ARM_SLOTS)[number]
 
-export const PROPS = ['none', 'book', 'bun', 'tablet'] as const;
-export type Prop = (typeof PROPS)[number];
+export const PROPS = ['none', 'book', 'bun', 'tablet'] as const
+export type Prop = (typeof PROPS)[number]
 
 export type ParamDef =
   | { key: string; kind: 'number'; min: number; max: number; def: number }
-  | { key: string; kind: 'enum'; values: readonly string[]; def: string };
+  | { key: string; kind: 'enum'; values: readonly string[]; def: string }
 
 /** The full known parameter table. Unknown "fx.<name>" keys follow the fx rule. */
 export const PARAM_DEFS: readonly ParamDef[] = [
@@ -68,7 +78,7 @@ export const PARAM_DEFS: readonly ParamDef[] = [
   { key: 'head.y', kind: 'number', min: -10, max: 10, def: 0 },
   { key: 'eye.L.open', kind: 'number', min: 0, max: 1, def: 1 },
   { key: 'eye.R.open', kind: 'number', min: 0, max: 1, def: 1 },
-  { key: 'eye.shape', kind: 'enum', values: EYE_SLOTS, def: 'auto' },
+  { key: 'eye.shape', kind: 'enum', values: ['auto', ...EYE_SLOTS], def: 'auto' },
   { key: 'eye.lookX', kind: 'number', min: -1, max: 1, def: 0 },
   { key: 'eye.lookY', kind: 'number', min: -1, max: 1, def: 0 },
   { key: 'mouth.shape', kind: 'enum', values: MOUTH_SLOTS, def: 'smile' },
@@ -90,18 +100,18 @@ export const PARAM_DEFS: readonly ParamDef[] = [
   { key: 'string.L.rot', kind: 'number', min: -25, max: 25, def: 0 },
   { key: 'string.R.rot', kind: 'number', min: -25, max: 25, def: 0 },
   { key: 'prop', kind: 'enum', values: PROPS, def: 'none' },
-];
+]
 
-const DEFS_BY_KEY: ReadonlyMap<string, ParamDef> = new Map(PARAM_DEFS.map((d) => [d.key, d]));
+const DEFS_BY_KEY: ReadonlyMap<string, ParamDef> = new Map(PARAM_DEFS.map((d) => [d.key, d]))
 
 /** Effect-strength params ("fx.<name>") all live in 0..1 and default to 0. */
-export const isFxParam = (key: string): boolean => key.startsWith('fx.');
+export const isFxParam = (key: string): boolean => key.startsWith('fx.')
 
 /** A fresh parameter map with every default value. */
 export function createDefaultParams(): RigParams {
-  const p: RigParams = {};
-  for (const d of PARAM_DEFS) p[d.key] = d.def;
-  return p;
+  const p: RigParams = {}
+  for (const d of PARAM_DEFS) p[d.key] = d.def
+  return p
 }
 
 /**
@@ -110,54 +120,54 @@ export function createDefaultParams(): RigParams {
  * numbers clamp to 0..1, unknown keys are dropped.
  */
 export function clampParams(input: RigParams): RigParams {
-  const out: RigParams = {};
+  const out: RigParams = {}
   for (const [key, value] of Object.entries(input)) {
-    const def = DEFS_BY_KEY.get(key);
+    const def = DEFS_BY_KEY.get(key)
     if (def) {
       if (def.kind === 'number') {
-        if (typeof value !== 'number' || !Number.isFinite(value)) continue;
-        out[key] = Math.min(def.max, Math.max(def.min, value));
+        if (typeof value !== 'number' || !Number.isFinite(value)) continue
+        out[key] = Math.min(def.max, Math.max(def.min, value))
       } else if (typeof value === 'string' && (def.values as readonly string[]).includes(value)) {
-        out[key] = value;
+        out[key] = value
       }
-      continue;
+      continue
     }
     if (isFxParam(key)) {
       if (typeof value === 'number' && Number.isFinite(value)) {
-        out[key] = Math.min(1, Math.max(0, value));
+        out[key] = Math.min(1, Math.max(0, value))
       }
     }
     // Unknown keys are ignored entirely.
   }
-  return out;
+  return out
 }
 
 export function getNum(params: RigParams, key: string): number {
-  const v = params[key];
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  const v = params[key]
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0
 }
 
 export function getEnum(params: RigParams, key: string): string {
-  const v = params[key];
-  return typeof v === 'string' ? v : '';
+  const v = params[key]
+  return typeof v === 'string' ? v : ''
 }
 
 /** Linear interpolation between two parameter maps (enums blend by weight). */
 export function lerpParams(a: RigParams, b: RigParams, weightB: number): RigParams {
-  const out: RigParams = {};
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  const out: RigParams = {}
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
   for (const key of keys) {
-    const va = a[key];
-    const vb = b[key];
+    const va = a[key]
+    const vb = b[key]
     if (typeof va === 'number' && typeof vb === 'number') {
-      out[key] = va + (vb - va) * weightB;
+      out[key] = va + (vb - va) * weightB
     } else if (typeof va === 'string' && typeof vb === 'string') {
-      out[key] = weightB > 0.5 ? vb : va;
+      out[key] = weightB > 0.5 ? vb : va
     } else if (va !== undefined) {
-      out[key] = va;
+      out[key] = va
     } else if (vb !== undefined) {
-      out[key] = vb;
+      out[key] = vb
     }
   }
-  return out;
+  return out
 }
