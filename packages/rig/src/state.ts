@@ -8,7 +8,7 @@
 
 import { evalClip, eventsBetween } from './clip.js'
 import { mixLayers } from './mixer.js'
-import { clampParams, lerpParams, type RigParams } from './params.js'
+import type { RigParams } from './params.js'
 import type { Clip } from './schema.js'
 
 const FADE_MS = 150
@@ -106,7 +106,6 @@ export class RigStateMachine {
     this.action = { clip, startMs: nowMs }
     this.actionPrevT = nowMs
     this.lastRequest = { name, atMs: nowMs }
-    if (clip.expression) this.setExpressionByName(clip.expression, nowMs)
   }
 
   /** Chain into a follow-up action when a clip declares next. */
@@ -121,19 +120,10 @@ export class RigStateMachine {
   }
 
   /** Activate an expression preset from the expressions table. */
-  setExpression(entry: { name: string; params: RigParams } | null, nowMs: number): void {
+  setExpression(entry: { name: string; params: RigParams } | null, _nowMs: number): void {
     this.expressionName = entry?.name ?? null
     this.expressionParams = entry?.params ?? {}
     this.exprWeight = 0 // ramps up in update() over 120 ms
-    this.lastExpressionChangeAt = nowMs
-  }
-
-  private lastExpressionChangeAt = -Infinity
-
-  private setExpressionByName(name: string, nowMs: number): void {
-    void name
-    void nowMs
-    // Expression lookup is injected by the app layer via setExpression().
   }
 
   /**

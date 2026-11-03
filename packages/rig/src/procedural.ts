@@ -6,7 +6,7 @@
  * randomness comes from a seeded PRNG so runs are reproducible in tests.
  */
 
-import { clampParams, type RigParams } from './params.js'
+import type { RigParams } from './params.js'
 
 /** Deterministic 32-bit PRNG (mulberry32). */
 export function makeRng(seed: number): () => number {
@@ -88,6 +88,7 @@ export class ProceduralEngine {
 
   tick(input: ProceduralInput): ProceduralOutput {
     const { tMs, dtMs, sleeping = false } = input
+    void dtMs // kept for interface stability; smoothing lives in applyGaze
     const params: RigParams = {}
 
     // Breathing: 0..1 sine, slower while sleeping.

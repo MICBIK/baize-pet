@@ -58,7 +58,7 @@ function composeTransforms(
 ): { dx: number; dy: number; rotDeg: number; scaleX: number; scaleY: number } {
   // body group: translate + lean + squash (pivot at the feet)
   const anchor = manifest.anchor
-  const feet: RigPoint = [anchor.centerX, anchor.groundY]
+  const _feet: RigPoint = [anchor.centerX, anchor.groundY]
   const bodyX = getNum(params, 'body.x')
   const bodyY = getNum(params, 'body.y')
   const lean = getNum(params, 'body.lean')
@@ -151,7 +151,7 @@ export function partClass(id: string): string {
 
 /** Neck pivot from the head group (fallback: mid-height). */
 function headPivot(manifest: RigManifest): RigPoint {
-  const g = manifest.groups['head']
+  const g = manifest.groups.head
   if (g) return g.pivot
   return [manifest.anchor.centerX, manifest.anchor.groundY * 0.55]
 }
@@ -219,8 +219,7 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
       else if (part.id === 'mouth') slotName = mouthSlot(params)
       else if (part.id.startsWith('third-eye')) slotName = thirdEyeSlot(params)
       if (slotName) {
-        const slot =
-          slots[slotName] ?? slots['down'] ?? slots['open'] ?? slots['smile'] ?? slots['closed']
+        const slot = slots[slotName] ?? slots.down ?? slots.open ?? slots.smile ?? slots.closed
         if (!slot) continue // part absent for this slot
         image = slot.image
         px = slot.x
@@ -271,7 +270,7 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
     if (part.id === 'iris-L' || part.id === 'iris-R') {
       const side = part.id === 'iris-L' ? 'L' : 'R'
       const eye = manifest.parts.find((p) => p.id === `eye-${side}`)
-      const openSlot = eye?.slots?.['open']
+      const openSlot = eye?.slots?.open
       if (eyeSlot(params, side) === 'open' && openSlot) {
         const eyeW = 90 // eye-white width estimate in master px, refined at A8
         irisShift = {

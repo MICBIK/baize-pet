@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest'
 import { mixLayers } from './mixer.js'
-import { clampParams, createDefaultParams } from './params.js'
+import { clampParams } from './params.js'
 
 describe('mixLayers', () => {
   const base = clampParams({
@@ -35,14 +35,14 @@ describe('mixLayers', () => {
     }
     const out = mixLayers({ base, expression: expr })
     expect(out['eye.shape']).toBe('star')
-    expect(out['blush']).toBe(1)
+    expect(out.blush).toBe(1)
     expect(out['body.x']).toBe(0) // untouched by expression
   })
 
   it('expression numerics lerp with its weight', () => {
     const expr = { params: clampParams({ blush: 1 }), weight: 0.25 }
     const out = mixLayers({ base, expression: expr })
-    expect(out['blush']).toBeCloseTo(0.25, 10)
+    expect(out.blush).toBeCloseTo(0.25, 10)
   })
 
   it('procedural blink caps eye open, replaces look and breath', () => {

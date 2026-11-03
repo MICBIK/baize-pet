@@ -35,15 +35,16 @@ describe('procedural engine', () => {
   it('breathes on the 3.2 s cycle and slower while sleeping', () => {
     const e = new ProceduralEngine(1)
     const at = (t: number, sleeping = false) =>
-      e.tick({ tMs: t, dtMs: 16, sleeping })['params']['body.breath']
+      e.tick({ tMs: t, dtMs: 16, sleeping }).params['body.breath']
     const awakePeak = at(1600) // half period
     expect(awakePeak).toBeCloseTo(1, 1)
     expect(at(3200)).toBeCloseTo(0, 1)
     const sleep = new ProceduralEngine(1)
     // 4600 ms period: at 1600 ms the phase is 2π*1600/4600 -> breath ≈ 0.79.
-    expect(
-      sleep.tick({ tMs: 1600, dtMs: 16, sleeping: true })['params']['body.breath'],
-    ).toBeCloseTo(0.79, 1)
+    expect(sleep.tick({ tMs: 1600, dtMs: 16, sleeping: true }).params['body.breath']).toBeCloseTo(
+      0.79,
+      1,
+    )
   })
 
   it('blinks: eyes dip to 0 and recover on the stated timeline', () => {
@@ -53,7 +54,7 @@ describe('procedural engine', () => {
     let closedAt = -1
     let recoveredAt = -1
     for (let t = 0; t <= 8000 && recoveredAt < 0; t += 16) {
-      const open = Number(e.tick({ tMs: t, dtMs: 16 })['params']['eye.L.open'] ?? 1)
+      const open = Number(e.tick({ tMs: t, dtMs: 16 }).params['eye.L.open'] ?? 1)
       if (open <= 0.02 && !sawClosed) {
         sawClosed = true
         closedAt = t
@@ -70,7 +71,7 @@ describe('procedural engine', () => {
     const dt = 16
     let lookX = 0
     for (let t = 0; t <= 500; t += dt) {
-      const p = e.tick({ tMs: t, dtMs: dt, look: { x: 1, y: 0 } })['params']
+      const p = e.tick({ tMs: t, dtMs: dt, look: { x: 1, y: 0 } }).params
       lookX = Number(p['eye.lookX'] ?? 0)
     }
     expect(lookX).toBeGreaterThan(0.9)
@@ -78,7 +79,7 @@ describe('procedural engine', () => {
       const e2 = new ProceduralEngine(5)
       let p: ReturnType<ProceduralEngine['tick']>['params'] | undefined
       for (let t = 0; t <= 500; t += 16)
-        p = e2.tick({ tMs: t, dtMs: 16, look: { x: 1, y: 0 } })['params']
+        p = e2.tick({ tMs: t, dtMs: 16, look: { x: 1, y: 0 } }).params
       return Number(p?.['head.turnX'] ?? 0)
     })()
     expect(headTurn).toBeCloseTo(lookX * 0.45, 1)

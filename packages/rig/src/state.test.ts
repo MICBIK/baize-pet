@@ -87,9 +87,9 @@ describe('expressions and say', () => {
     const exprs = new Map([['happy', { blush: 1 }]])
     sm.request('happy', 0)
     const r1 = sm.update(200, 120, exprs)
-    expect(r1.params['blush']).toBeGreaterThan(0.5)
+    expect(r1.params.blush).toBeGreaterThan(0.5)
     const r2 = sm.update(2000, 120, exprs)
-    expect(r2.params['blush']).toBe(0)
+    expect(r2.params.blush).toBe(0)
   })
 
   it('builds CJK/latin/punctuation lip frames with the right timing', () => {
