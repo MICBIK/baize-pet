@@ -354,6 +354,10 @@ function drawSpriteFrame(sheet: string, dpr: number, size: number): void {
     spritePlayers.set(sheet, sp)
   }
   sp.play(sheet, clock)
+  // Clear the full backing store first (drawRigFrame does this for rig
+  // frames; the sprite path must not leave the previous pose underneath).
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.setTransform(dpr * (size / 256), 0, 0, dpr * (size / 256), 0, 0)
   sp.draw(ctx, clock)
 }
