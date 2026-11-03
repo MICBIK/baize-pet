@@ -22,7 +22,7 @@ import { registerMemoryIpc } from './memory-ipc'
 import { createPetWindow, petRendererUrl, registerPetIpc, startCursorPush } from './pet-window'
 import { createTray } from './tray'
 
-const BUILT_IN_PACK_ID = 'b3'
+const BUILT_IN_PACK_ID = 'baize-b3'
 
 // Custom scheme serving character pack files to the renderer (media-src in the CSP).
 // standard/secure/corsEnabled are required so <video> frames stay untainted for the

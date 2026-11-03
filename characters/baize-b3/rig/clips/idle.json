@@ -1,0 +1,24 @@
+{
+ "name": "idle",
+ "duration": 3200,
+ "loop": true,
+ "layer": "base",
+ "expression": "neutral",
+ "tracks": {
+  "body.breath": [
+   [
+    0,
+    0
+   ],
+   [
+    1600,
+    0.5,
+    "easeInOutSine"
+   ],
+   [
+    3200,
+    0
+   ]
+  ]
+ }
+}

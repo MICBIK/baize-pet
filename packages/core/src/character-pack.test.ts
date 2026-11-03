@@ -154,6 +154,16 @@ describe('loadCharacterPack', () => {
     expect(pack.persona).toContain('白泽')
   })
 
+  it('round-trips the repository baize-b3 rig pack', () => {
+    const pack = loadCharacterPack(join(__dirname, '../../../characters/baize-b3'))
+    expect(pack.manifest.id).toBe('baize-b3')
+    expect(pack.manifest.renderer).toBe('rig')
+    expect(pack.manifest.animations.idle).toBe('rig:idle')
+    expect(pack.manifest.animations.dance).toBe('sprite:dance')
+    expect(Object.keys(pack.manifest.animations).length).toBeGreaterThanOrEqual(39)
+    expect(pack.manifest.lines?.click?.length).toBeGreaterThan(0)
+  })
+
   it('defaults renderer to video for legacy packs', () => {
     const dir = writePack('default-renderer', VALID_MANIFEST)
     expect(loadCharacterPack(dir).manifest.renderer).toBe('video')

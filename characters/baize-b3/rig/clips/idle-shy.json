@@ -1,0 +1,35 @@
+{
+ "name": "idle-shy",
+ "duration": 3000,
+ "loop": true,
+ "layer": "base",
+ "expression": "shy",
+ "tracks": {
+  "arm.R.slot": [
+   [
+    0,
+    "cover"
+   ]
+  ],
+  "eye.lookX": [
+   [
+    0,
+    -0.8
+   ],
+   [
+    2000,
+    -0.8
+   ],
+   [
+    2300,
+    0.1,
+    "easeInOutSine"
+   ],
+   [
+    2900,
+    -0.8,
+    "easeInOutSine"
+   ]
+  ]
+ }
+}

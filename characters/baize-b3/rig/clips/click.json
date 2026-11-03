@@ -1,0 +1,70 @@
+{
+ "name": "click",
+ "duration": 450,
+ "loop": false,
+ "layer": "action",
+ "expression": "surprised",
+ "tracks": {
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    80,
+    0.35,
+    "easeOutSine"
+   ],
+   [
+    180,
+    -0.2,
+    "easeOutBack"
+   ],
+   [
+    320,
+    0.15,
+    "easeOutSine"
+   ],
+   [
+    450,
+    0
+   ]
+  ],
+  "body.y": [
+   [
+    0,
+    0
+   ],
+   [
+    180,
+    -18,
+    "easeOutBack"
+   ],
+   [
+    450,
+    0,
+    "easeOutBack"
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "squeeze"
+   ],
+   [
+    300,
+    "auto"
+   ]
+  ],
+  "mouth.shape": [
+   [
+    0,
+    "o"
+   ],
+   [
+    300,
+    "smile"
+   ]
+  ]
+ }
+}

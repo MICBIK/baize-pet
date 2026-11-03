@@ -1,0 +1,61 @@
+{
+ "name": "done",
+ "duration": 1200,
+ "loop": false,
+ "layer": "action",
+ "expression": "starstruck",
+ "tracks": {
+  "body.y": [
+   [
+    0,
+    0
+   ],
+   [
+    300,
+    -20,
+    "easeOutCubic"
+   ],
+   [
+    600,
+    0,
+    "easeInSine"
+   ],
+   [
+    900,
+    -10,
+    "easeOutCubic"
+   ],
+   [
+    1200,
+    0,
+    "easeInSine"
+   ]
+  ],
+  "arm.L.slot": [
+   [
+    200,
+    "up"
+   ],
+   [
+    1100,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    200,
+    "up"
+   ],
+   [
+    1100,
+    "down"
+   ]
+  ]
+ },
+ "events": [
+  [
+   300,
+   "fx:sparkle5"
+  ]
+ ]
+}

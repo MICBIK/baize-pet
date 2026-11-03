@@ -1,0 +1,70 @@
+{
+ "name": "third-eye",
+ "duration": 2200,
+ "loop": false,
+ "layer": "action",
+ "expression": "thinking",
+ "tracks": {
+  "thirdEye": [
+   [
+    0,
+    0
+   ],
+   [
+    900,
+    1,
+    "easeInOutSine"
+   ],
+   [
+    1900,
+    1
+   ],
+   [
+    2200,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "thirdEye.glow": [
+   [
+    700,
+    0
+   ],
+   [
+    1100,
+    0.8,
+    "easeInOutSine"
+   ],
+   [
+    1900,
+    0.8
+   ],
+   [
+    2200,
+    0
+   ]
+  ],
+  "eye.lookY": [
+   [
+    0,
+    -1
+   ]
+  ],
+  "mouth.shape": [
+   [
+    0,
+    "o"
+   ],
+   [
+    1800,
+    "smile"
+   ]
+  ]
+ },
+ "events": [
+  [
+   900,
+   "fx:beam"
+  ]
+ ]
+}

@@ -1,0 +1,51 @@
+{
+ "name": "surprised",
+ "duration": 1400,
+ "loop": false,
+ "layer": "action",
+ "expression": "surprised",
+ "tracks": {
+  "body.y": [
+   [
+    0,
+    0
+   ],
+   [
+    120,
+    -22,
+    "easeOutCubic"
+   ],
+   [
+    400,
+    0,
+    "easeInSine"
+   ]
+  ],
+  "arm.L.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    400,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    400,
+    "down"
+   ]
+  ]
+ },
+ "events": [
+  [
+   0,
+   "fx:exclaim"
+  ]
+ ]
+}

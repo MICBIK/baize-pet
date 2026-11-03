@@ -1,0 +1,170 @@
+{
+ "name": "walk_right",
+ "duration": 560,
+ "loop": true,
+ "layer": "action",
+ "tracks": {
+  "leg.L.rot": [
+   [
+    0,
+    16
+   ],
+   [
+    280,
+    -16,
+    "easeInOutSine"
+   ],
+   [
+    560,
+    16,
+    "easeInOutSine"
+   ]
+  ],
+  "leg.R.rot": [
+   [
+    0,
+    -16
+   ],
+   [
+    280,
+    16,
+    "easeInOutSine"
+   ],
+   [
+    560,
+    -16,
+    "easeInOutSine"
+   ]
+  ],
+  "leg.L.lift": [
+   [
+    0,
+    0
+   ],
+   [
+    140,
+    6,
+    "easeOutSine"
+   ],
+   [
+    280,
+    0
+   ],
+   [
+    420,
+    0
+   ],
+   [
+    560,
+    0
+   ]
+  ],
+  "leg.R.lift": [
+   [
+    0,
+    0
+   ],
+   [
+    140,
+    0
+   ],
+   [
+    280,
+    0
+   ],
+   [
+    420,
+    6,
+    "easeOutSine"
+   ],
+   [
+    560,
+    0
+   ]
+  ],
+  "body.y": [
+   [
+    0,
+    0
+   ],
+   [
+    140,
+    -5,
+    "easeOutSine"
+   ],
+   [
+    280,
+    0
+   ],
+   [
+    420,
+    -5,
+    "easeOutSine"
+   ],
+   [
+    560,
+    0
+   ]
+  ],
+  "arm.L.rot": [
+   [
+    0,
+    10
+   ],
+   [
+    280,
+    -10,
+    "easeInOutSine"
+   ],
+   [
+    560,
+    10,
+    "easeInOutSine"
+   ]
+  ],
+  "arm.R.rot": [
+   [
+    0,
+    -10
+   ],
+   [
+    280,
+    10,
+    "easeInOutSine"
+   ],
+   [
+    560,
+    -10,
+    "easeInOutSine"
+   ]
+  ],
+  "body.lean": [
+   [
+    0,
+    4
+   ]
+  ],
+  "head.turnX": [
+   [
+    0,
+    0.4
+   ]
+  ],
+  "tail.rot": [
+   [
+    0,
+    -8
+   ],
+   [
+    280,
+    8,
+    "easeInOutSine"
+   ],
+   [
+    560,
+    -8,
+    "easeInOutSine"
+   ]
+  ]
+ }
+}

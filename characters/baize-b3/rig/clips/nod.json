@@ -1,0 +1,69 @@
+{
+ "name": "nod",
+ "duration": 900,
+ "loop": false,
+ "layer": "action",
+ "expression": "happy",
+ "tracks": {
+  "head.turnY": [
+   [
+    0,
+    0
+   ],
+   [
+    220,
+    0.45,
+    "easeOutSine"
+   ],
+   [
+    440,
+    0,
+    "easeInOutSine"
+   ],
+   [
+    660,
+    0.45,
+    "easeOutSine"
+   ],
+   [
+    900,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "head.y": [
+   [
+    0,
+    0
+   ],
+   [
+    220,
+    4,
+    "easeOutSine"
+   ],
+   [
+    440,
+    0
+   ],
+   [
+    660,
+    4,
+    "easeOutSine"
+   ],
+   [
+    900,
+    0
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "smile"
+   ],
+   [
+    800,
+    "auto"
+   ]
+  ]
+ }
+}

@@ -1,0 +1,54 @@
+{
+ "name": "land",
+ "duration": 500,
+ "loop": false,
+ "layer": "action",
+ "tracks": {
+  "body.squash": [
+   [
+    0,
+    0.3,
+    "easeOutSine"
+   ],
+   [
+    200,
+    -0.1,
+    "easeOutBack"
+   ],
+   [
+    500,
+    0
+   ]
+  ],
+  "arm.L.slot": [
+   [
+    0,
+    "out"
+   ],
+   [
+    320,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "out"
+   ],
+   [
+    320,
+    "down"
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "squeeze"
+   ],
+   [
+    260,
+    "auto"
+   ]
+  ]
+ }
+}

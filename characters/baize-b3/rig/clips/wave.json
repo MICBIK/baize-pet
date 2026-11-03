@@ -1,0 +1,78 @@
+{
+ "name": "wave",
+ "duration": 1600,
+ "loop": false,
+ "layer": "action",
+ "expression": "laugh",
+ "tracks": {
+  "arm.R.slot": [
+   [
+    0,
+    "wave"
+   ],
+   [
+    1450,
+    "down"
+   ]
+  ],
+  "arm.R.rot": [
+   [
+    0,
+    0,
+    "easeOutBack"
+   ],
+   [
+    180,
+    -18,
+    "easeInOutSine"
+   ],
+   [
+    380,
+    18
+   ],
+   [
+    580,
+    -18
+   ],
+   [
+    780,
+    18
+   ],
+   [
+    980,
+    0,
+    "easeOutSine"
+   ],
+   [
+    1450,
+    0
+   ]
+  ],
+  "body.lean": [
+   [
+    0,
+    0
+   ],
+   [
+    200,
+    3,
+    "easeOutSine"
+   ],
+   [
+    1300,
+    3
+   ],
+   [
+    1600,
+    0,
+    "easeInOutSine"
+   ]
+  ]
+ },
+ "events": [
+  [
+   0,
+   "say:wave"
+  ]
+ ]
+}

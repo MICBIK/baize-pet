@@ -1,0 +1,59 @@
+{
+ "name": "tilt-head",
+ "duration": 1400,
+ "loop": false,
+ "layer": "action",
+ "expression": "confused",
+ "tracks": {
+  "head.tilt": [
+   [
+    0,
+    0
+   ],
+   [
+    350,
+    14,
+    "easeOutBack"
+   ],
+   [
+    1050,
+    14
+   ],
+   [
+    1400,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "ear.R.rot": [
+   [
+    350,
+    -15
+   ],
+   [
+    1050,
+    -15
+   ],
+   [
+    1400,
+    0
+   ]
+  ],
+  "eye.shape": [
+   [
+    500,
+    "closed"
+   ],
+   [
+    620,
+    "auto"
+   ]
+  ]
+ },
+ "events": [
+  [
+   300,
+   "fx:question"
+  ]
+ ]
+}

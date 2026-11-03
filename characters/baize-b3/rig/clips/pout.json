@@ -1,0 +1,66 @@
+{
+ "name": "pout",
+ "duration": 1800,
+ "loop": false,
+ "layer": "action",
+ "expression": "pout",
+ "tracks": {
+  "head.turnX": [
+   [
+    0,
+    0
+   ],
+   [
+    300,
+    -0.6,
+    "easeOutSine"
+   ],
+   [
+    1200,
+    -0.6
+   ],
+   [
+    1800,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "leg.R.lift": [
+   [
+    600,
+    0
+   ],
+   [
+    700,
+    10,
+    "easeOutSine"
+   ],
+   [
+    900,
+    0,
+    "easeInSine"
+   ]
+  ],
+  "body.squash": [
+   [
+    880,
+    0
+   ],
+   [
+    980,
+    0.1,
+    "easeOutSine"
+   ],
+   [
+    1100,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   900,
+   "fx:puff"
+  ]
+ ]
+}

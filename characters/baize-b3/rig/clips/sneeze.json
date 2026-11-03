@@ -1,0 +1,94 @@
+{
+ "name": "sneeze",
+ "duration": 1600,
+ "loop": false,
+ "layer": "action",
+ "expression": "sleepy",
+ "tracks": {
+  "head.turnY": [
+   [
+    0,
+    0
+   ],
+   [
+    600,
+    -0.5,
+    "easeInOutSine"
+   ],
+   [
+    800,
+    0.5,
+    "easeOutBack"
+   ],
+   [
+    1100,
+    0.5
+   ],
+   [
+    1600,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "head.tilt": [
+   [
+    0,
+    0
+   ],
+   [
+    600,
+    -6,
+    "easeInOutSine"
+   ],
+   [
+    1600,
+    0
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "squeeze"
+   ],
+   [
+    1000,
+    "auto"
+   ]
+  ],
+  "mouth.shape": [
+   [
+    0,
+    "small"
+   ],
+   [
+    750,
+    "o"
+   ],
+   [
+    1000,
+    "smile"
+   ]
+  ],
+  "body.squash": [
+   [
+    780,
+    0
+   ],
+   [
+    880,
+    0.25,
+    "easeOutSine"
+   ],
+   [
+    1100,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   850,
+   "fx:puff"
+  ]
+ ]
+}

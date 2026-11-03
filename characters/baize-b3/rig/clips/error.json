@@ -1,0 +1,72 @@
+{
+ "name": "error",
+ "duration": 2000,
+ "loop": false,
+ "layer": "action",
+ "expression": "dizzy",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "head"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "head"
+   ]
+  ],
+  "head.tilt": [
+   [
+    0,
+    0
+   ],
+   [
+    400,
+    -5,
+    "easeInOutSine"
+   ],
+   [
+    800,
+    5,
+    "easeInOutSine"
+   ],
+   [
+    1200,
+    -4,
+    "easeInOutSine"
+   ],
+   [
+    1600,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "body.squash": [
+   [
+    1700,
+    0
+   ],
+   [
+    1800,
+    -0.1,
+    "easeOutSine"
+   ],
+   [
+    2000,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   100,
+   "fx:sweat"
+  ],
+  [
+   1750,
+   "fx:puff"
+  ]
+ ]
+}
