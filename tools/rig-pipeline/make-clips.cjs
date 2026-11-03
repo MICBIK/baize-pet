@@ -392,7 +392,9 @@ clips.wave = {
       [0, 'wave'],
       [1450, 'down'],
     ],
-    'arm.R.rot': K_series(),
+    // No arm.R.rot swing: the slot crop rides on the shoulder rotation, so
+    // swinging it would sweep the crop's aligned non-arm pixels across the
+    // head. The pose swap + marks + lean carry the gesture instead.
     'body.lean': [
       [0, 0],
       [200, 3, 'easeOutSine'],
@@ -401,18 +403,6 @@ clips.wave = {
     ],
   },
   events: [[0, 'say:wave']],
-}
-
-function K_series() {
-  return [
-    [0, 0, 'easeOutBack'],
-    [180, -18, 'easeInOutSine'],
-    [380, 18],
-    [580, -18],
-    [780, 18],
-    [980, 0, 'easeOutSine'],
-    [1450, 0],
-  ]
 }
 
 clips['look-around'] = {
