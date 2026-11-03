@@ -107,7 +107,11 @@
     530
    ],
    "slots": {
-    "down": "parts/arm-L.png"
+    "down": {
+     "image": "parts/arm-L.png",
+     "x": 227,
+     "y": 472
+    }
    }
   },
   {
@@ -122,7 +126,11 @@
     710
    ],
    "slots": {
-    "down": "parts/arm-R.png"
+    "down": {
+     "image": "parts/arm-R.png",
+     "x": 493,
+     "y": 615
+    }
    }
   },
   {
@@ -197,7 +205,11 @@
     175
    ],
    "slots": {
-    "closed": "parts/third-eye.png"
+    "closed": {
+     "image": "parts/third-eye.png",
+     "x": 373,
+     "y": 138
+    }
    }
   },
   {
@@ -236,7 +248,11 @@
     394
    ],
    "slots": {
-    "open": "parts/eye-L.png"
+    "open": {
+     "image": "parts/eye-L.png",
+     "x": 324,
+     "y": 357
+    }
    }
   },
   {
@@ -251,7 +267,11 @@
     392
    ],
    "slots": {
-    "open": "parts/eye-R.png"
+    "open": {
+     "image": "parts/eye-R.png",
+     "x": 464,
+     "y": 354
+    }
    }
   },
   {
@@ -290,7 +310,11 @@
     457
    ],
    "slots": {
-    "smile": "parts/mouth.png"
+    "smile": {
+     "image": "parts/mouth.png",
+     "x": 401,
+     "y": 435
+    }
    }
   },
   {
