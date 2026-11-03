@@ -18,6 +18,8 @@
     "apps/desktop/src/**/*.ts",
     "apps/desktop/src/**/*.tsx",
     "apps/desktop/electron-vite.config.ts",
+    "tools/*/src/**/*.ts",
+    "tools/*/vite.config.ts",
     "vitest.config.ts"
   ]
 }

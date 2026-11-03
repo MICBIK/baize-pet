@@ -2,22 +2,20 @@
 
 /**
  * Rig renderer (task book C): Canvas2D at devicePixelRatio, driven by
- * requestAnimationFrame. Loads rig.json + clips + expressions + part images
- * through the CORS-enabled baize-character:// protocol, runs the state
- * machine + procedural life + springs, and draws solved parts in z order.
+ * requestAnimationFrame. Loads the pack through the shared loadRigPack
+ * (baize-character:// protocol), runs the state machine + procedural life +
+ * springs, and draws through the shared drawRigFrame — the same code the
+ * tools/rig-viewer debug page uses.
  */
 
 import {
-  type Clip,
+  drawRigFrame,
+  loadRigPack,
   mixLayers,
   ProceduralEngine,
-  parseClip,
-  parseExpressions,
-  parseRigManifest,
-  type RigManifest,
+  type RigPackResources,
   type RigParams,
   RigStateMachine,
-  type SolvedPart,
   Spring,
   solve,
 } from '@baize/rig'
@@ -25,98 +23,6 @@ import type { CharacterInfo } from '@baize/shared'
 import { useEffect, useRef } from 'react'
 import { SpritePlayer } from './SpritePlayer'
 import { packUrl } from './VideoPlayer'
-
-interface RigResources {
-  manifest: RigManifest
-  clips: Map<string, Clip>
-  expressions: Map<string, RigParams>
-  images: Map<string, HTMLImageElement>
-  spriteMeta: SpriteMetaAlias | null
-  spriteImages: Map<string, HTMLImageElement>
-}
-
-type SpriteMetaAlias = {
-  cell: number
-  ground: number
-  states: Record<string, { frames: number; durations: number[]; loop: boolean }>
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`fetch ${url}: ${res.status}`)
-  return res.json()
-}
-
-async function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error(`image load failed: ${url}`))
-    img.src = url
-  })
-}
-
-/** Collect every image path referenced by the manifest (parts/slots/fx). */
-function collectImagePaths(manifest: RigManifest): string[] {
-  const paths = new Set<string>()
-  for (const part of manifest.parts) {
-    if (part.image) paths.add(part.image)
-    for (const slot of Object.values(part.slots ?? {})) paths.add(slot.image)
-  }
-  for (const fx of Object.values(manifest.fx ?? {})) paths.add(fx.image)
-  return [...paths]
-}
-
-/** rig/ directory (the folder holding rig.json), pack-relative. */
-function rigDirOf(info: CharacterInfo): string {
-  const rig = info.rig ?? 'rig/rig.json'
-  const idx = rig.lastIndexOf('/')
-  return idx >= 0 ? rig.slice(0, idx) : ''
-}
-
-async function loadResources(info: CharacterInfo): Promise<RigResources> {
-  const dir = rigDirOf(info)
-  const underRig = (p: string): string => (dir ? `${dir}/${p}` : p)
-
-  const manifest = parseRigManifest(await fetchJson(packUrl(info, info.rig ?? 'rig/rig.json')))
-  const clips = new Map<string, Clip>()
-  for (const clipPath of manifest.clips ?? []) {
-    const clip = parseClip(await fetchJson(packUrl(info, underRig(clipPath))))
-    clips.set(clip.name, clip)
-  }
-  const expressions = new Map<string, RigParams>()
-  if (manifest.expressions) {
-    const file = parseExpressions(await fetchJson(packUrl(info, underRig(manifest.expressions))))
-    for (const e of file.expressions) expressions.set(e.name, e.params)
-  }
-
-  const images = new Map<string, HTMLImageElement>()
-  await Promise.all(
-    collectImagePaths(manifest).map(async (p) => {
-      images.set(p, await loadImage(packUrl(info, underRig(p))))
-    }),
-  )
-
-  let spriteMeta: SpriteMetaAlias | null = null
-  const spriteImages = new Map<string, HTMLImageElement>()
-  try {
-    spriteMeta = (await fetchJson(packUrl(info, 'sprites/sprites.json'))) as SpriteMetaAlias
-    const sheets = new Set<string>()
-    for (const [_action, file] of Object.entries(info.animations)) {
-      if (file.startsWith('sprite:')) sheets.add(file.slice(7))
-    }
-    await Promise.all(
-      [...sheets].map(async (sheet) => {
-        spriteImages.set(sheet, await loadImage(packUrl(info, `sprites/${sheet}.png`)))
-      }),
-    )
-  } catch {
-    spriteMeta = null // sprite layer is optional
-  }
-
-  return { manifest, clips, expressions, images, spriteMeta, spriteImages }
-}
 
 export interface RigPlayerProps {
   info: CharacterInfo
@@ -131,7 +37,7 @@ export interface RigPlayerProps {
 
 export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const resourcesRef = useRef<RigResources | null>(null)
+  const resourcesRef = useRef<RigPackResources | null>(null)
   const stateRef = useRef<RigStateMachine | null>(null)
   const actionRef = useRef(props.action)
   const sayRef = useRef(props.say)
@@ -142,7 +48,10 @@ export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    loadResources(props.info)
+    loadRigPack(packUrl(props.info, ''), {
+      rigPath: props.info.rig ?? 'rig/rig.json',
+      animations: props.info.animations,
+    })
       .then((res) => {
         if (cancelled) return
         resourcesRef.current = res
@@ -288,7 +197,7 @@ export function RigPlayer(props: RigPlayerProps): React.JSX.Element {
         // procedural life and spring physics on top.
         const params = mixLayers({ base: out.params, procedural: proc.params, physics })
         const parts = solve(res.manifest, params)
-        drawParts(ctx, res, parts, dpr, size)
+        drawRigFrame(ctx, res.manifest, res.images, parts, dpr, size)
       }
 
       // Crossfade overlay: previous pose fades out on top.
@@ -320,100 +229,4 @@ function spriteTotalMs(
 ): number {
   const st = meta.states[name]
   return st ? st.durations.reduce((a, b) => a + b, 0) : Number.POSITIVE_INFINITY
-}
-
-/**
- * Anchor mapping (task book 四): hood width -> 92/256 of the window, feet on
- * ground 246/256. Returns the master-px -> display-px scale and offsets.
- */
-export function anchorTransform(
-  manifest: RigManifest,
-  sizeCss: number,
-): { scale: number; offsetX: number; offsetY: number } {
-  const a = manifest.anchor
-  const masterW = manifest.master.width
-  const hoodMaster = (a.hoodWidth / masterW) * manifest.master.width // sanity alias
-  void hoodMaster
-  const scale = ((92 / 256) * sizeCss) / a.hoodWidth
-  const offsetX = sizeCss / 2 - a.centerX * scale
-  const offsetY = (246 / 256) * sizeCss - a.groundY * scale
-  return { scale, offsetX, offsetY }
-}
-
-/** Draw solved parts in master coordinates under the anchor transform. */
-function drawParts(
-  ctx: CanvasRenderingContext2D,
-  res: RigResources,
-  parts: SolvedPart[],
-  dpr: number,
-  sizeCss: number,
-): void {
-  const { scale, offsetX, offsetY } = anchorTransform(res.manifest, sizeCss)
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.translate(offsetX, offsetY)
-  ctx.scale(scale, scale)
-
-  for (const sp of parts) {
-    const img = res.images.get(sp.image)
-    if (!img) continue
-    ctx.save()
-    ctx.globalAlpha = sp.opacity
-    if (sp.blend === 'lighter') ctx.globalCompositeOperation = 'lighter'
-
-    // Squash around the feet, then rotate around the (moved) pivot.
-    ctx.translate(sp.scalePivot[0], sp.scalePivot[1])
-    ctx.scale(sp.scaleX, sp.scaleY)
-    ctx.translate(-sp.scalePivot[0], -sp.scalePivot[1])
-    ctx.translate(sp.pivot[0] + sp.dx, sp.pivot[1] + sp.dy)
-    ctx.rotate((sp.rotDeg * Math.PI) / 180)
-    ctx.translate(-sp.pivot[0], -sp.pivot[1])
-
-    const w = img.naturalWidth
-    const h = img.naturalHeight
-    if (sp.mirrored) {
-      ctx.translate(sp.restX + w / 2, sp.restY + h / 2)
-      ctx.scale(-1, 1)
-      ctx.drawImage(img, -w / 2, -h / 2)
-    } else {
-      ctx.drawImage(img, sp.restX, sp.restY)
-    }
-
-    // Iris: shift inside the eye-white mask (source-in clip via scratch).
-    if (sp.irisShift && sp.clipImage) {
-      const mask = res.images.get(sp.clipImage)
-      if (mask) {
-        ctx.restore()
-        ctx.save()
-        drawIrisClipped(ctx, img, mask, sp, res)
-        ctx.restore()
-        continue
-      }
-    }
-    ctx.restore()
-  }
-}
-
-/** One-frame iris composite: iris shifted, masked by the eye-white alpha. */
-function drawIrisClipped(
-  ctx: CanvasRenderingContext2D,
-  iris: HTMLImageElement,
-  mask: HTMLImageElement,
-  sp: SolvedPart,
-  res: RigResources,
-): void {
-  void res
-  const scratch = document.createElement('canvas')
-  scratch.width = iris.naturalWidth
-  scratch.height = iris.naturalHeight
-  const sctx = scratch.getContext('2d')
-  if (!sctx) return
-  sctx.drawImage(iris, 0, 0)
-  sctx.globalCompositeOperation = 'source-in'
-  const maskX = sp.clipRestX ?? 0
-  const maskY = sp.clipRestY ?? 0
-  sctx.drawImage(mask, -maskX, -maskY)
-  ctx.drawImage(scratch, sp.restX + (sp.irisShift?.dx ?? 0), sp.restY + (sp.irisShift?.dy ?? 0))
 }
