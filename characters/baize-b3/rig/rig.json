@@ -31,7 +31,7 @@
    "z": 10,
    "parent": "body",
    "pivot": [
-    398,
+    373,
     945
    ]
   },
@@ -62,13 +62,13 @@
   {
    "id": "torso",
    "image": "parts/torso.png",
-   "x": 227,
-   "y": 441,
+   "x": 174,
+   "y": 97,
    "z": 30,
    "parent": "body",
    "pivot": [
-    439,
-    620
+    436,
+    451
    ]
   },
   {
@@ -130,6 +130,11 @@
      "image": "parts/arm-R.png",
      "x": 493,
      "y": 615
+    },
+    "wave": {
+     "image": "parts/arm-R-wave.png",
+     "x": 490,
+     "y": 330
     }
    }
   },
@@ -215,13 +220,13 @@
   {
    "id": "face",
    "image": "parts/face.png",
-   "x": 265,
+   "x": 328,
    "y": 281,
    "z": 60,
    "parent": "head",
    "pivot": [
-    425,
-    403
+    445,
+    388
    ]
   },
   {

@@ -209,6 +209,7 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
     const blend: SolvedPart['blend'] = part.blend ?? 'normal'
 
     // Slot resolution.
+    let z = part.z
     const slots = part.slots
     if (slots) {
       let slotName: string | undefined
@@ -224,6 +225,12 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
         image = slot.image
         px = slot.x
         py = slot.y
+        // Raised-arm slots render above the hood (60) and face (66): the
+        // wave hand sits in front of the hood, chin/cover sleeves cover the
+        // lower face. The down slot keeps the part's original z.
+        if (slotName !== 'down' && (part.id === 'arm-L' || part.id === 'arm-R')) {
+          z = 68
+        }
       }
     }
 
@@ -300,12 +307,15 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
       mirrored,
       opacity,
       blend,
-      z: part.z,
+      z,
       irisShift,
       clipImage,
       clipRestX,
       clipRestY,
     })
   }
+  // Raised-arm slots bump their z (above hood/face): re-sort so the draw
+  // order follows the bumped values.
+  out.sort((a, b) => a.z - b.z)
   return out
 }
