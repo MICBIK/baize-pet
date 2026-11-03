@@ -5,19 +5,19 @@
 // Outputs: tools/rig-pipeline/prompts/expressions/*.txt (committed)
 //          demo/rig-art/expression-jobs.json (local)
 
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require('node:fs')
+const path = require('node:path')
 
-const ROOT = '/Users/baihaibin/Documents/WorkSpares/BaiZe';
-const PROMPT_DIR = path.join(ROOT, 'tools/rig-pipeline/prompts/expressions');
-const JOBS = path.join(ROOT, 'demo/rig-art/expression-jobs.json');
+const ROOT = '/Users/baihaibin/Documents/WorkSpares/BaiZe'
+const PROMPT_DIR = path.join(ROOT, 'tools/rig-pipeline/prompts/expressions')
+const JOBS = path.join(ROOT, 'demo/rig-art/expression-jobs.json')
 
 const HEAD =
-  'Redraw the reference image as the exact same character, same size, same position, same pose, same outline thickness and colours, identical in every detail EXCEPT the following change: ';
+  'Redraw the reference image as the exact same character, same size, same position, same pose, same outline thickness and colours, identical in every detail EXCEPT the following change: '
 const EYES_TAIL =
-  ' Only the eyes change; the rest of the face, hair, hood and body stay pixel-identical. Transparent background (real alpha channel), no checkerboard, no text, no effects.';
+  ' Only the eyes change; the rest of the face, hair, hood and body stay pixel-identical. Transparent background (real alpha channel), no checkerboard, no text, no effects.'
 const MOUTH_TAIL =
-  ' Only the mouth changes; the rest of the face, hair, hood and body stay pixel-identical. Transparent background (real alpha channel), no checkerboard, no text, no effects.';
+  ' Only the mouth changes; the rest of the face, hair, hood and body stay pixel-identical. Transparent background (real alpha channel), no checkerboard, no text, no effects.'
 
 const EYES = [
   ['eye-half', 'the eyes are half closed, upper lids lowered halfway, relaxed'],
@@ -32,7 +32,7 @@ const EYES = [
   ['eye-sleepy', 'the eyes are heavy-lidded and droopy, almost falling asleep'],
   ['eye-focus', 'the eyes are serious and determined, lids slightly pressed'],
   ['eye-lookup', 'the eyes look upward to the upper left, curious'],
-];
+]
 
 const MOUTHS = [
   ['mouth-small', 'the mouth is a small open circle, talking a little'],
@@ -45,30 +45,30 @@ const MOUTHS = [
   ['mouth-wobbly', 'the mouth is a wavy trembling line about to cry'],
   ['mouth-grin', 'the mouth is a smug lopsided grin'],
   ['mouth-puff', 'the cheeks are puffed out with the mouth pressed shut in a puffy sulk'],
-];
+]
 
-const jobs = [];
-fs.mkdirSync(PROMPT_DIR, { recursive: true });
+const jobs = []
+fs.mkdirSync(PROMPT_DIR, { recursive: true })
 for (const [name, change] of EYES) {
-  const file = path.join(PROMPT_DIR, name + '.txt');
-  fs.writeFileSync(file, HEAD + change + '.' + EYES_TAIL + '\n');
+  const file = path.join(PROMPT_DIR, `${name}.txt`)
+  fs.writeFileSync(file, `${HEAD + change}.${EYES_TAIL}\n`)
   jobs.push({
     out: path.join('demo/rig-art/expressions', `${name}.png`),
     promptFile: path.relative(ROOT, file),
     refs: ['demo/rig-art/master.png'],
     size: '1024x1536',
-  });
+  })
 }
 for (const [name, change] of MOUTHS) {
-  const file = path.join(PROMPT_DIR, name + '.txt');
-  fs.writeFileSync(file, HEAD + change + '.' + MOUTH_TAIL + '\n');
+  const file = path.join(PROMPT_DIR, `${name}.txt`)
+  fs.writeFileSync(file, `${HEAD + change}.${MOUTH_TAIL}\n`)
   jobs.push({
     out: path.join('demo/rig-art/expressions', `${name}.png`),
     promptFile: path.relative(ROOT, file),
     refs: ['demo/rig-art/master.png'],
     size: '1024x1536',
-  });
+  })
 }
-fs.mkdirSync(path.dirname(JOBS), { recursive: true });
-fs.writeFileSync(JOBS, JSON.stringify(jobs, null, 1) + '\n');
-console.log(`wrote ${EYES.length + MOUTHS.length} expression jobs -> ${path.relative(ROOT, JOBS)}`);
+fs.mkdirSync(path.dirname(JOBS), { recursive: true })
+fs.writeFileSync(JOBS, `${JSON.stringify(jobs, null, 1)}\n`)
+console.log(`wrote ${EYES.length + MOUTHS.length} expression jobs -> ${path.relative(ROOT, JOBS)}`)
