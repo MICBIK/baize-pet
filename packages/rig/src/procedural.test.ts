@@ -25,7 +25,7 @@ describe('procedural engine', () => {
       const out: number[] = []
       for (let t = 0; t <= 3000; t += 16) {
         const r = e.tick({ tMs: t, dtMs: 16 })
-        out.push(Number((r.params['body.breath'] ?? -9).toFixed(5)))
+        out.push(Number(Number(r.params['body.breath'] ?? -9).toFixed(5)))
       }
       return out
     }
@@ -53,7 +53,7 @@ describe('procedural engine', () => {
     let closedAt = -1
     let recoveredAt = -1
     for (let t = 0; t <= 8000 && recoveredAt < 0; t += 16) {
-      const open = e.tick({ tMs: t, dtMs: 16 })['params']['eye.L.open'] ?? 1
+      const open = Number(e.tick({ tMs: t, dtMs: 16 })['params']['eye.L.open'] ?? 1)
       if (open <= 0.02 && !sawClosed) {
         sawClosed = true
         closedAt = t
@@ -71,15 +71,15 @@ describe('procedural engine', () => {
     let lookX = 0
     for (let t = 0; t <= 500; t += dt) {
       const p = e.tick({ tMs: t, dtMs: dt, look: { x: 1, y: 0 } })['params']
-      lookX = p['eye.lookX'] ?? 0
+      lookX = Number(p['eye.lookX'] ?? 0)
     }
     expect(lookX).toBeGreaterThan(0.9)
     const headTurn = (() => {
       const e2 = new ProceduralEngine(5)
-      let p
+      let p: ReturnType<ProceduralEngine['tick']>['params'] | undefined
       for (let t = 0; t <= 500; t += 16)
         p = e2.tick({ tMs: t, dtMs: 16, look: { x: 1, y: 0 } })['params']
-      return p['head.turnX']
+      return Number(p?.['head.turnX'] ?? 0)
     })()
     expect(headTurn).toBeCloseTo(lookX * 0.45, 1)
   })
