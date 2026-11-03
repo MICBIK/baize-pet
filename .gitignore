@@ -15,3 +15,8 @@ coverage/
 .idea/
 .mimosa/
 交付报告.md
+# Rig round: local art pipeline assets, images with plaintext keys, builds (never commit)
+demo/
+*.dmg
+# Previous webm pack (superseded by characters/baize-b3); keep local, never commit
+characters/b3/
