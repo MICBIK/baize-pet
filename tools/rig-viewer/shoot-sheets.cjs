@@ -153,7 +153,7 @@ async function main() {
         hoodNorm: +(hoodW / ((92 / 256) * size)).toFixed(3), // 1.0 == contract
       }
     })
-    report.push(`${label}\tfeet246=${metrics.feetY}\thood=${metrics.hoodNorm}`)
+    report.push(`${label}\tfeet246=${metrics.feet246}\thood=${metrics.hoodNorm}`)
 
     // Composite the sheet in-page: 5 columns of 360px cells.
     const dataUrls = await Promise.all(frames.map((b) => b.toString('base64')))
