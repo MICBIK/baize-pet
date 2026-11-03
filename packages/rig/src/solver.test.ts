@@ -149,8 +149,9 @@ describe('solve()', () => {
     const eye = turned.find((s) => s.id === 'eye-L')
     const hood = turned.find((s) => s.id === 'hood')
     const base = solve(mini, p)
-    const eyeDx = (eye?.x ?? 0) - (base.find((s) => s.id === 'eye-L')?.x ?? 0)
-    const hoodDx = (hood?.x ?? 0) - (base.find((s) => s.id === 'hood')?.x ?? 0)
+    const xOf = (s?: { restX: number; dx: number }): number => (s ? s.restX + s.dx : 0)
+    const eyeDx = xOf(eye) - xOf(base.find((s) => s.id === 'eye-L'))
+    const hoodDx = xOf(hood) - xOf(base.find((s) => s.id === 'hood'))
     expect(Math.abs(eyeDx)).toBeGreaterThan(Math.abs(hoodDx))
   })
 

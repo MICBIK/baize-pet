@@ -14,10 +14,17 @@ export interface SolvedPart {
   id: string
   /** Pack-relative image path after slot resolution. */
   image: string
-  /** Master-px position of the image top-left after all transforms. */
-  x: number
-  y: number
-  /** Rotation around the part pivot, degrees. */
+  /** Rest-pose top-left of the part image in master px. */
+  restX: number
+  restY: number
+  /** Translation applied by groups/parallax/breath/lift. */
+  dx: number
+  dy: number
+  /** Rotation pivot in master px (part pivot, moved by body translation). */
+  pivot: RigPoint
+  /** Body squash scales around this point (the feet). */
+  scalePivot: RigPoint
+  /** Rotation around `pivot`, degrees (group lean/tilt + part rotation). */
   rotDeg: number
   scaleX: number
   scaleY: number
@@ -30,8 +37,8 @@ export interface SolvedPart {
   irisShift?: { dx: number; dy: number }
   /** Eye-white mask image that clips the iris (open-eye slots only). */
   clipImage?: string
-  clipX?: number
-  clipY?: number
+  clipRestX?: number
+  clipRestY?: number
 }
 
 const DEG = Math.PI / 180
@@ -185,6 +192,10 @@ export function thirdEyeSlot(params: RigParams): 'closed' | 'half' | 'open' {
 export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
   const out: SolvedPart[] = []
   const parts = [...manifest.parts].sort((a, b) => a.z - b.z)
+  const anchor = manifest.anchor
+  const feet: RigPoint = [anchor.centerX, anchor.groundY]
+  const bodyX = getNum(params, 'body.x')
+  const bodyY = getNum(params, 'body.y')
 
   for (const part of parts) {
     const cls = partClass(part.id)
@@ -255,8 +266,8 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
     // Iris shift (open eyes only) at 18% of eye-white width.
     let irisShift: SolvedPart['irisShift']
     let clipImage: string | undefined
-    let clipX: number | undefined
-    let clipY: number | undefined
+    let clipRestX: number | undefined
+    let clipRestY: number | undefined
     if (part.id === 'iris-L' || part.id === 'iris-R') {
       const side = part.id === 'iris-L' ? 'L' : 'R'
       const eye = manifest.parts.find((p) => p.id === `eye-${side}`)
@@ -268,8 +279,8 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
           dy: getNum(params, 'eye.lookY') * eyeW * 0.12,
         }
         clipImage = openSlot.image
-        clipX = openSlot.x
-        clipY = openSlot.y
+        clipRestX = openSlot.x
+        clipRestY = openSlot.y
       } else {
         continue // iris hidden when the open slot is not shown
       }
@@ -278,8 +289,12 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
     out.push({
       id: part.id,
       image,
-      x: px + tr.dx,
-      y: py + tr.dy,
+      restX: px,
+      restY: py,
+      dx: tr.dx,
+      dy: tr.dy,
+      pivot: [part.pivot[0] + bodyX, part.pivot[1] + bodyY],
+      scalePivot: feet,
       rotDeg: tr.rotDeg + extraRot,
       scaleX: tr.scaleX,
       scaleY: tr.scaleY,
@@ -289,8 +304,8 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
       z: part.z,
       irisShift,
       clipImage,
-      clipX,
-      clipY,
+      clipRestX,
+      clipRestY,
     })
   }
   return out
