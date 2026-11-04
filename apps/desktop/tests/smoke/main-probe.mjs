@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { mkdtempSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -24,7 +25,9 @@ try {
       out.mainFetch = 'ERR ' + String(e).slice(0, 100)
     }
     try {
-      const r = await net.fetch('file:///Users/baihaibin/Documents/WorkSpares/BaiZe/characters/baize-b3/rig/rig.json')
+      const r = await net.fetch(
+        'file:///Users/baihaibin/Documents/WorkSpares/BaiZe/characters/baize-b3/rig/rig.json',
+      )
       out.fileFetch = r.status
     } catch (e) {
       out.fileFetch = 'ERR ' + String(e).slice(0, 100)
