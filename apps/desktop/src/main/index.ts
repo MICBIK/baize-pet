@@ -57,12 +57,18 @@ function registerCharacterProtocol(): void {
       return new Response('forbidden', { status: 403 })
     }
     const response = await net.fetch(pathToFileURL(filePath).toString())
-    // Mirror the file response with a permissive CORS header so cross-origin
-    // <video> consumption keeps the drawing buffer readable.
+    // Mirror the file response with permissive CORS + Private Network Access
+    // headers so cross-origin renderer consumption (file:// origin pages
+    // fetching this scheme; <video>/<img>/fetch) keeps the drawing buffer
+    // readable instead of failing Chromium's PNA gate.
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
-      headers: { ...Object.fromEntries(response.headers), 'Access-Control-Allow-Origin': '*' },
+      headers: {
+        ...Object.fromEntries(response.headers),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Private-Network': 'true',
+      },
     })
   })
 }

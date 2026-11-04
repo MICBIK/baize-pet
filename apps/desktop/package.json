@@ -15,6 +15,9 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:win": "electron-vite build && electron-builder --win"
   },
+  "dependencies": {
+    "@baize/rig": "workspace:*"
+  },
   "devDependencies": {
     "@baize/shared": "workspace:*",
     "@types/react": "^19.2.0",
