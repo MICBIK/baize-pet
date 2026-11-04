@@ -53,6 +53,8 @@ export class RigStateMachine {
   private sayFrames: LipFrame[] = []
   private sayStart = 0
   private sayActive = false
+  /** fx name → pulse start ms; drives fx.<name> params (rework P1-2). */
+  private fxPulse = new Map<string, number>()
 
   constructor(clips: Clip[], config: StateMachineConfig) {
     this.clips = new Map(clips.map((c) => [c.name, c]))
@@ -206,6 +208,27 @@ export class RigStateMachine {
         this.exprWeight > 0.001 ? { params: exprParams, weight: this.exprWeight } : undefined,
       procedural,
     })
+
+    // fx events ('fx:note', 'fx:sparkle3', …) pulse the fx.<name> param:
+    // attack to 1 immediately, exponential-ish linear decay over 1.4 s
+    // (task book A7 / D-events). sparkle3/5/1 all drive the one sparkle.
+    for (const ev of events) {
+      if (!ev.startsWith('fx:')) continue
+      const raw = ev.slice(3)
+      const name = raw.startsWith('sparkle') ? 'sparkle' : raw
+      if (name === 'beam') continue // third-eye glow is param-driven
+      this.fxPulse.set(name, nowMs)
+    }
+    for (const [fxName, t0] of this.fxPulse) {
+      const age = (nowMs - t0) / 1400
+      if (age >= 1) {
+        this.fxPulse.delete(fxName)
+        continue
+      }
+      const key = `fx.${fxName}`
+      const cur = params[key]
+      params[key] = Math.max(typeof cur === 'number' ? cur : 0, 1 - age)
+    }
     return { params, events }
   }
 }

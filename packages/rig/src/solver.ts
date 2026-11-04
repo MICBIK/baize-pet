@@ -267,6 +267,11 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
       const strength = getNum(params, `fx.${part.id.slice(3)}`)
       if (strength <= 0) continue
       opacity = strength
+      // drift upward as the effect fades; a slight pop-in scale (A7)
+      tr.dy -= (1 - strength) * 26
+      const sc = 0.85 + 0.15 * strength
+      tr.scaleX *= sc
+      tr.scaleY *= sc
     }
 
     // Iris shift (open eyes only) at 18% of eye-white width.

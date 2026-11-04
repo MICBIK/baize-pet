@@ -44,6 +44,20 @@ PART_META = {
     'iris-R':    {'z': 71, 'parent': 'head'},
     'mouth':     {'z': 72, 'parent': 'head', 'slot_key': 'mouth.shape'},
     'blush':     {'z': 73, 'parent': 'head', 'opacityParam': 'blush'},
+    # A7 effect sprites (gen_fx.py): opacity driven by the fx.<name> param.
+    'fx-sweat':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.sweat'},
+    'fx-tear':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.tear'},
+    'fx-zzz':     {'z': 90, 'parent': 'head', 'opacityParam': 'fx.zzz'},
+    'fx-question': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.question'},
+    'fx-exclaim': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.exclaim'},
+    'fx-note':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.note'},
+    'fx-heart':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.heart'},
+    'fx-sparkle': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.sparkle'},
+    'fx-puff':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.puff'},
+    'fx-anger':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.anger'},
+    'fx-bubble':  {'z': 90, 'parent': 'head', 'opacityParam': 'fx.bubble'},
+    # A4 third-eye-glow: pure amber soft light under the fx stack, additive.
+    'third-eye-glow': {'z': 57, 'parent': 'head', 'opacityParam': 'thirdEye.glow', 'blend': 'lighter'},
 }
 
 
@@ -141,6 +155,8 @@ def main():
             }
         if 'opacityParam' in meta:
             entry['opacityParam'] = meta['opacityParam']
+        if 'blend' in meta:
+            entry['blend'] = meta['blend']
         rig['parts'].append(entry)
 
     # A6 arm slots extracted from registered variants (extract_arm_slots.py):
@@ -172,9 +188,17 @@ def main():
             for side in sides:
                 src = ROOT / (rep[side]['image'] if side else rep['image'])
                 ox, oy = rep[side]['offset'] if side else rep['offset']
-                shape = name[4:] if name.startswith('eye-') else name[6:]
+                if name.startswith('third-eye-'):
+                    # P1-1: third-eye half/open patches from the A2 variants
+                    shape = name[len('third-eye-'):]
+                    part_id = 'third-eye'
+                elif name.startswith('eye-'):
+                    shape = name[4:]
+                    part_id = f'eye-{side}'
+                else:
+                    shape = name[6:]
+                    part_id = 'mouth'
                 shape = rename.get(shape, shape)
-                part_id = f'eye-{side}' if side else 'mouth'
                 target = by_id.get(part_id)
                 if not target:
                     continue
