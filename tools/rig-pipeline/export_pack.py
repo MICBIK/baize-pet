@@ -152,6 +152,38 @@ def main():
             if extra:
                 entry.setdefault('slots', {}).update(extra)
 
+    # A6 expression patches (extract_patches.py): eye/mouth shape slots keyed
+    # by the eye.shape / mouth.shape enums. Patches are cut at master scale
+    # (offset = top-left in master px); like every part image they export at
+    # half scale while x/y stay in master space. Shapes without a usable patch
+    # (squeeze/teary/wink, most mouths) stay absent and the solver's slot
+    # fallback (down/open/smile/closed) answers them (F4).
+    report_file = ART / 'patches' / 'patches-report.json'
+    if report_file.exists():
+        report = json.loads(report_file.read_text(encoding='utf-8'))
+        rename = {'lookup': 'look-up'}
+        by_id = {e['id']: e for e in rig['parts']}
+        for name, rep in sorted(report.items()):
+            sides = ('L', 'R') if 'L' in rep else (None,)
+            for side in sides:
+                src = ROOT / (rep[side]['image'] if side else rep['image'])
+                ox, oy = rep[side]['offset'] if side else rep['offset']
+                shape = name[4:] if name.startswith('eye-') else name[6:]
+                shape = rename.get(shape, shape)
+                part_id = f'eye-{side}' if side else 'mouth'
+                target = by_id.get(part_id)
+                if not target:
+                    continue
+                im = Image.open(src).convert('RGBA')
+                half = im.resize(
+                    (max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))),
+                    Image.LANCZOS,
+                )
+                out_name = f'{name}-{side}.png' if side else f'{name}.png'
+                rel = f'parts/{out_name}'
+                half.save(PACK / 'rig' / rel, optimize=True)
+                target.setdefault('slots', {})[shape] = {'image': rel, 'x': int(ox), 'y': int(oy)}
+
     # Copy clips + expressions produced by make-clips.cjs.
     clips_src = ART / 'clips-out'
     (PACK / 'rig' / 'clips').mkdir(parents=True, exist_ok=True)

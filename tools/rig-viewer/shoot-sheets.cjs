@@ -80,7 +80,8 @@ async function main() {
   })
   const targets = []
   for (const [g, labels] of Object.entries(groups)) {
-    if (!/待机|动作|序列帧/.test(g)) continue
+    // Default sweep only animates; --group may target any section (expressions…).
+    if (!groupFilter && !/待机|动作|序列帧/.test(g)) continue
     if (groupFilter && !g.includes(groupFilter)) continue
     for (const label of labels) targets.push({ group: g, label })
   }

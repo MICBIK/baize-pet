@@ -28,6 +28,11 @@ EYE_BOXES = {
 MOUTH_BOX = (400, 440, 458, 470)
 MARGIN = 12
 FEATHER = 3
+# Faces whose proportions drift too far from the master for an affine head
+# registration (mouth-puff renders the mouth ~20px above the box): the patch
+# would paste the wrong region, so the slot stays absent and the solver's
+# fallback answers it (F4).
+SKIP = {'mouth-puff'}
 
 
 def load_rgba(p):
@@ -37,13 +42,37 @@ def load_rgba(p):
     return im
 
 
-def head_register(master_gray, var):
+def head_register(master_gray, var, master_alpha=None):
     """Coarse-to-fine ECC on the head band; identity on failure."""
     h, w = master_gray.shape
     vg = cv2.cvtColor(var, cv2.COLOR_BGRA2GRAY)
     if vg.shape != master_gray.shape:
         var = cv2.resize(var, (w, h), interpolation=cv2.INTER_LANCZOS4)
         vg = cv2.cvtColor(var, cv2.COLOR_BGRA2GRAY)
+
+    # Pre-align by silhouette bbox (upstream renders the subject a few percent
+    # larger or smaller per frame; ECC alone diverges from that starting gap).
+    if master_alpha is not None:
+        def sil(img):
+            # Head band only: a swung-out tail must not widen the box.
+            a = (img[..., 3] if img.ndim == 3 else img)[60:600, 160:700]
+            ys, xs = np.where(a > 8)
+            if xs.size == 0:
+                return None
+            return float(xs.min()) + 160, float(ys.min()) + 60, float(xs.max()) + 160, float(ys.max()) + 60
+
+        mb = sil(master_alpha)
+        vb = sil(var)
+        if mb and vb:
+            s = (mb[2] - mb[0]) / max(vb[2] - vb[0], 1.0)
+            mcx, mcy = (mb[0] + mb[2]) / 2, (mb[1] + mb[3]) / 2
+            vcx, vcy = (vb[0] + vb[2]) / 2, (vb[1] + vb[3]) / 2
+            pre = np.float32([[s, 0, mcx - s * vcx], [0, s, mcy - s * vcy]])
+            var = cv2.warpAffine(
+                var, pre, (w, h), flags=cv2.INTER_LANCZOS4, borderValue=(0, 0, 0, 0)
+            )
+            vg = cv2.cvtColor(var, cv2.COLOR_BGRA2GRAY)
+
     mask = np.zeros_like(master_gray)
     mask[60:600, 160:700] = 255
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 200, 1e-6)
@@ -92,8 +121,10 @@ def main():
         var = load_rgba(p)
         if var is None:
             continue
-        _, aligned = head_register(mg, var)
+        _, aligned = head_register(mg, var, master[..., 3])
         name = p.stem
+        if name in SKIP:
+            continue
         entry = {}
         if name.startswith('eye-'):
             for side, box in EYE_BOXES.items():

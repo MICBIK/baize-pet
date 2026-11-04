@@ -257,6 +257,56 @@
      "image": "parts/eye-L.png",
      "x": 324,
      "y": 357
+    },
+    "closed": {
+     "image": "parts/eye-closed-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "focus": {
+     "image": "parts/eye-focus-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "half": {
+     "image": "parts/eye-half-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "heart": {
+     "image": "parts/eye-heart-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "look-up": {
+     "image": "parts/eye-lookup-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "sleepy": {
+     "image": "parts/eye-sleepy-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "smile": {
+     "image": "parts/eye-smile-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "star": {
+     "image": "parts/eye-star-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "swirl": {
+     "image": "parts/eye-swirl-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "wide": {
+     "image": "parts/eye-wide-L.png",
+     "x": 308,
+     "y": 338
     }
    }
   },
@@ -276,6 +326,56 @@
      "image": "parts/eye-R.png",
      "x": 464,
      "y": 354
+    },
+    "closed": {
+     "image": "parts/eye-closed-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "focus": {
+     "image": "parts/eye-focus-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "half": {
+     "image": "parts/eye-half-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "heart": {
+     "image": "parts/eye-heart-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "look-up": {
+     "image": "parts/eye-lookup-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "sleepy": {
+     "image": "parts/eye-sleepy-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "smile": {
+     "image": "parts/eye-smile-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "star": {
+     "image": "parts/eye-star-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "swirl": {
+     "image": "parts/eye-swirl-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "wide": {
+     "image": "parts/eye-wide-R.png",
+     "x": 428,
+     "y": 338
     }
    }
   },
@@ -319,6 +419,16 @@
      "image": "parts/mouth.png",
      "x": 401,
      "y": 435
+    },
+    "cat": {
+     "image": "parts/mouth-cat.png",
+     "x": 388,
+     "y": 428
+    },
+    "wide": {
+     "image": "parts/mouth-wide.png",
+     "x": 388,
+     "y": 428
     }
    }
   },
