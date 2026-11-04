@@ -131,6 +131,10 @@ def main():
             'parent': meta['parent'],
             'pivot': [int((x0 + x1) / 2), int((y0 + y1) / 2)],
         }
+        if pid in ('arm-L', 'arm-R'):
+            # arms rotate about the shoulder (A4), not the bbox centre —
+            # the wave fallback swings the whole arm around this point
+            entry['pivot'] = [int((x0 + x1) / 2), int(y0) + 20]
         if pid in SLOT_DEFAULTS:
             entry['slots'] = {
                 SLOT_DEFAULTS[pid]: {'image': rel, 'x': int(x0), 'y': int(y0)}

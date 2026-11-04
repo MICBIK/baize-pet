@@ -388,13 +388,20 @@ clips.wave = {
   layer: 'action',
   expression: 'laugh',
   tracks: {
-    'arm.R.slot': [
-      [0, 'wave'],
-      [1450, 'down'],
+    // The wave slot died in re-segmentation review: both v-arm-wave-R
+    // variants rendered the character in a dark palette, so the slot crop
+    // carried a dark sleeve plus hood fragments. Fallback per rework P0-2:
+    // the down arm swings about the shoulder pivot (now a real shoulder
+    // pivot in rig.json) — raise, wave twice, settle.
+    'arm.R.rot': [
+      [0, 0],
+      [280, -125, 'easeOutBack'],
+      [620, -145, 'easeInOutSine'],
+      [900, -122, 'easeInOutSine'],
+      [1180, -145, 'easeInOutSine'],
+      [1450, -122, 'easeInOutSine'],
+      [1600, 0, 'easeInOutSine'],
     ],
-    // No arm.R.rot swing: the slot crop rides on the shoulder rotation, so
-    // swinging it would sweep the crop's aligned non-arm pixels across the
-    // head. The pose swap + marks + lean carry the gesture instead.
     'body.lean': [
       [0, 0],
       [200, 3, 'easeOutSine'],

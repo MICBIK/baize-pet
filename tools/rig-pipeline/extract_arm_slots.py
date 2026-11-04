@@ -32,7 +32,9 @@ FEATHER = 10
 # that its gold lining printed as fragments around the hood at z68 — F4
 # fallback (think approximates the pose by rotating the down slot).
 PICKS = {
-    'wave': ('v-arm-wave-R-2.png', 'arm-R', (490, 330, 790, 780)),
+    # wave was dropped in round 2 (rework P0-2): both v-arm-wave-R variants
+    # rendered the character dark, so no clean sleeve crop exists — wave now
+    # swings the down arm about the shoulder pivot (make-clips.cjs).
 }
 
 

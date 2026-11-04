@@ -61,8 +61,8 @@ FACE_OPEN = [
 OVERLAP_GATE = 0.03  # violation area / smaller part area
 
 JOINTS = {
-    'arm-L': (-40, 40, None),
-    'arm-R': (-40, 40, None),
+    'arm-L': (-40, 150, None),
+    'arm-R': (-150, 40, None),
     'leg-L': (-22, 22, None),
     'leg-R': (-22, 22, None),
     'ear-L': (-20, 12, None),

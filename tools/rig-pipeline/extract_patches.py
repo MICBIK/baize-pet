@@ -93,7 +93,7 @@ def head_register(master_gray, var, master_alpha=None):
     return warp, aligned
 
 
-def cut_patch(img, box, margin, feather):
+def cut_patch(img, box, margin, feather, lining=None):
     x0, y0, x1, y1 = box
     H, W = img.shape[:2]
     a = max(0, x0 - margin)
@@ -101,6 +101,10 @@ def cut_patch(img, box, margin, feather):
     c = max(0, y0 - margin)
     d = min(H, y1 + margin)
     patch = img[c:d, a:b].copy()
+    if lining is not None:
+        # rework P0-3: never carry hood-lining amber — the patch mask is
+        # subtracted by the lining zone in this region, feathered after
+        patch[..., 3][lining[c:d, a:b]] = 0
     if feather > 0:
         alpha = patch[..., 3].astype(float)
         k = 2 * feather + 1
@@ -116,6 +120,15 @@ def main():
     mg = cv2.cvtColor(master, cv2.COLOR_BGR2GRAY) if master.shape[2] == 4 else None
     mg = cv2.cvtColor(master, cv2.COLOR_BGRA2GRAY)
 
+    # hood-lining zone (rework P0-3): amber pixels of the re-segmented hood
+    hood = load_rgba(ART / 'parts-ext/hood.png')
+    lab = cv2.cvtColor(hood[..., :3], cv2.COLOR_RGB2LAB)
+    lining = (
+        (lab[..., 1].astype(int) > 135)
+        & (lab[..., 2].astype(int) > 170)
+        & (hood[..., 3] > 8)
+    )
+
     report = {}
     for p in sorted(SRC.glob('*.png')):
         var = load_rgba(p)
@@ -128,12 +141,12 @@ def main():
         entry = {}
         if name.startswith('eye-'):
             for side, box in EYE_BOXES.items():
-                patch, ox, oy = cut_patch(aligned, box, MARGIN, FEATHER)
+                patch, ox, oy = cut_patch(aligned, box, MARGIN, FEATHER, lining)
                 out = OUT / f'{name}-{side}.png'
                 cv2.imwrite(str(out), patch)
                 entry[side] = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}
         elif name.startswith('mouth-'):
-            patch, ox, oy = cut_patch(aligned, MOUTH_BOX, MARGIN, FEATHER)
+            patch, ox, oy = cut_patch(aligned, MOUTH_BOX, MARGIN, FEATHER, lining)
             out = OUT / f'{name}.png'
             cv2.imwrite(str(out), patch)
             entry = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}
