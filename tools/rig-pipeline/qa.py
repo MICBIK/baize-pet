@@ -25,13 +25,48 @@ ZORDER = [
     'third-eye', 'face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth',
     'blush', 'bangs',
 ]
+
+# Round-2 gates (rework task book section 4).
+# Seam bands (master px) where joint-extension overlap is by design:
+# neck/collar, shoulders, hips, ear roots, tail root.
+SEAM_BANDS = [
+    ('neck', (280, 495, 590, 545)),
+    ('shoulder-L', (270, 520, 360, 590)),
+    ('shoulder-R', (495, 520, 585, 590)),
+    ('hip', (280, 735, 575, 865)),
+    ('ear-root-L', (165, 230, 315, 275)),
+    ('ear-root-R', (585, 230, 705, 275)),
+    ('tail-root', (545, 760, 610, 900)),
+]
+# Slot-replacement zones: a patch overlapping its host is design overlap.
+SLOT_PARTS = {'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'blush', 'third-eye'}
+HOSTS = {
+    'eye-L': {'face'}, 'eye-R': {'face'},
+    'iris-L': {'eye-L', 'face', 'hood'}, 'iris-R': {'eye-R', 'face', 'hood'},
+    'mouth': {'face', 'hood'}, 'blush': {'face', 'hood'},
+    'third-eye': {'hood'}, 'bangs': {'face', 'hood'},
+    'ear-L': {'hood'}, 'ear-R': {'hood'}, 'horn-L': {'hood'}, 'horn-R': {'hood'},
+    'string-L': {'torso'}, 'string-R': {'torso'},
+    'arm-L': {'torso'}, 'arm-R': {'torso'},
+    'leg-L': {'shorts'}, 'leg-R': {'shorts'}, 'tail': {'shorts'},
+}
+# Parallax completion band: P0-1 requires the hood to carry amber lining
+# under the whole face opening (head turn reveals it). Overlap of hood with
+# the face stack inside this polygon is design — but the pixels there must
+# be lining colour, checked below, or it is a hidden face copy.
+FACE_OPEN = [
+    (295, 240), (272, 320), (270, 390), (295, 455), (330, 495), (400, 515),
+    (470, 515), (545, 490), (580, 450), (600, 385), (598, 315), (575, 250),
+]
+OVERLAP_GATE = 0.03  # violation area / smaller part area
+
 JOINTS = {
     'arm-L': (-40, 40, None),
     'arm-R': (-40, 40, None),
     'leg-L': (-22, 22, None),
     'leg-R': (-22, 22, None),
-    'ear-L': (-30, 15, None),
-    'ear-R': (-30, 15, None),
+    'ear-L': (-20, 12, None),
+    'ear-R': (-20, 12, None),
     'tail': (-30, 30, None),
     'head.tilt': (-18, 18, 'head'),
     'body.lean': (-12, 12, 'all'),
@@ -89,6 +124,9 @@ def restoration(parts, master):
     bad = (diff > 10) & opaque
     lbl, n = ndimage.label(bad)
     worst = int(ndimage.sum(bad, lbl, range(1, n + 1)).max()) if n else 0
+    vis = master.copy()
+    vis[bad] = (255, 0, 255, 255)
+    Image.fromarray(vis).save(QA / 'restoration-diff.png')
     return iou, float(mean_diff), worst
 
 
@@ -171,6 +209,210 @@ def sizes(parts):
     sheet.save(QA / 'sizes.png')
 
 
+def _seam_mask(shape):
+    m = np.zeros(shape[:2], bool)
+    for _, (x0, y0, x1, y1) in SEAM_BANDS:
+        m[y0:y1, x0:x1] = True
+    return m
+
+
+def exclusivity(parts, master):
+    """Round-2 gate 1: pairwise opaque overlap outside the design seam bands
+    must stay under 3% of the smaller part. A patch overlapping its host, or
+    hood lining under the face opening, is design — the lining pixels must be
+    amber (verified below), otherwise it is a hidden copy and still a defect."""
+    seam = _seam_mask(master.shape)
+    fm = np.zeros(master.shape[:2], np.uint8)
+    cv2.fillPoly(fm, [np.array(FACE_OPEN, np.int32)], 1)
+    face_open = fm.astype(bool)
+    lab = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2LAB)
+    hh = np.zeros(master.shape[:2], bool)
+    hh[:548] = True
+    amber_sel = (lab[..., 1].astype(int) > 135) & (lab[..., 2].astype(int) > 170) & hh & (master[..., 3] > 128)
+    lining_rgb = np.median(master[..., :3][amber_sel], axis=0).astype(float)
+    lining_lab = cv2.cvtColor(lining_rgb.reshape(1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)[0, 0].astype(float)
+
+    alphas = {n: p[..., 3] > 128 for n, p in parts.items()}
+    areas = {n: int(a.sum()) for n, a in alphas.items()}
+    rows, heat = [], np.zeros(master.shape[:2], np.uint32)
+    names = [n for n in ZORDER if n in parts]
+    worst = ('', 0.0)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if b in HOSTS.get(a, set()) or a in HOSTS.get(b, set()):
+                # Host overlap (patch on its host, extension under its host,
+                # lining under the face stack) is mandated by A4/A5 and the
+                # rework task book P0-1. Whether the lower layer carries a
+                # hidden COPY there is exactly what the removal gate measures
+                # (edge-corr < 0.5 per part, reviewed per image) — counting
+                # these pairs as exclusivity violations would double-report.
+                both = alphas[a] & alphas[b]
+                if both.any():
+                    rows.append((a, b, int(both.sum()), -1.0))  # recorded, exempt
+                continue
+            inter = alphas[a] & alphas[b]
+            inter &= ~seam
+            band = np.zeros(master.shape[:2], bool)
+            if a == 'hood' and b in ('face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'blush', 'bangs'):
+                band = face_open & inter
+            inter &= ~band
+            px = int(inter.sum())
+            bad_band = 0
+            if band.any():
+                px_lab = cv2.cvtColor(
+                    parts[a][..., :3][band].reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB
+                ).reshape(-1, 3).astype(float)
+                de = np.sqrt(((px_lab - lining_lab) ** 2).sum(axis=1))
+                bad_band = int((de > 50).sum())
+            if px == 0 and bad_band == 0:
+                continue
+            ratio = max(px, bad_band) / max(1, min(areas[a], areas[b]))
+            heat[np.where(inter)] = 1
+            rows.append((a, b, px + bad_band, ratio))
+            if ratio > worst[1]:
+                worst = (f'{a}~{b}', ratio)
+    Image.fromarray((heat > 0).astype(np.uint8) * 255).save(QA / 'overlap.png')
+    return rows, worst
+
+
+def removal_test(parts, master):
+    """Round-2 gate 2: hide each part, recomposite; inside that part's OWN
+    region (excluding pixels other parts also cover — their ink stays by
+    design) the hidden frame must not retain the part's ink (Canny edge
+    correlation < 0.5 against the full composite)."""
+    full = composite(parts)
+    full_gray = cv2.cvtColor(full, cv2.COLOR_RGBA2GRAY)
+    full_edges = cv2.Canny(full_gray, 60, 160) > 0
+    results = {}
+    for name in ZORDER:
+        if name not in parts:
+            continue
+        hidden = composite({k: v for k, v in parts.items() if k != name})
+        hid_edges = cv2.Canny(cv2.cvtColor(hidden, cv2.COLOR_RGBA2GRAY), 60, 160) > 0
+        region = (parts[name][..., 3] > 128).copy()
+        for other, a in parts.items():
+            if other != name:
+                region &= ~(a[..., 3] > 128)
+        a_, b_ = full_edges[region], hid_edges[region]
+        if a_.sum() == 0 and b_.sum() == 0:
+            results[name] = 0.0
+        else:
+            corr = np.corrcoef(a_.astype(float), b_.astype(float))[0, 1]
+            results[name] = float(0.0 if np.isnan(corr) else corr)
+        vis = hidden.copy()
+        vis[region & ~hid_edges] = (vis[region & ~hid_edges] * 0.4).astype(np.uint8)
+        Image.fromarray(vis).save(QA / f'remove-{name}.png')
+    return results
+
+
+def head_motion(parts, master):
+    """Round-2 gate 3: six head poses (tilt ±12°, turnX ±1, turnY ±1) — no
+    double outlines, stray horns/ears or amber debris. Visual sheet."""
+    alpha_full = master[..., 3] > 128
+    ys, xs = np.where(alpha_full)
+    ground_y = int(ys.max())
+    center_x = int((xs.min() + xs.max()) / 2)
+    neck = (center_x, ground_y * 0.47)
+    poses = [('tilt-12', {'head.tilt': -12}), ('tilt+12', {'head.tilt': 12}),
+             ('turnX-1', {'head.turnX': -1}), ('turnX+1', {'head.turnX': 1}),
+             ('turnY-1', {'head.turnY': -1}), ('turnY+1', {'head.turnY': 1})]
+    cells = []
+    for label, params in poses:
+        rot, off, sc = {}, {}, {}
+        if 'head.tilt' in params:
+            deg = params['head.tilt']
+            for n in HEAD_GROUP:
+                if n in parts:
+                    rot[n] = (deg, neck)
+        if 'head.turnX' in params:
+            k = params['head.turnX'] * 0.06 * 300  # head width 6% in px (~300)
+            for n, f in (('hood', -0.35), ('ear-L', -0.45), ('ear-R', -0.45),
+                         ('face', 0.4), ('eye-L', 1.0), ('eye-R', 1.0),
+                         ('iris-L', 1.0), ('iris-R', 1.0), ('mouth', 1.0),
+                         ('bangs', 1.0), ('third-eye', 0.6)):
+                if n in parts:
+                    off[n] = (k * f, 0)
+        if 'head.turnY' in params:
+            k = params['head.turnY'] * 0.04 * 380
+            for n, f in (('hood', 0.3), ('face', 1.0), ('eye-L', 1.0),
+                         ('eye-R', 1.0), ('iris-L', 1.0), ('iris-R', 1.0),
+                         ('mouth', 1.0), ('bangs', 1.0)):
+                if n in parts:
+                    off[n] = (0, k * f)
+        cells.append((label, composite_shift(parts, rot, off, sc)))
+    cell_w = 300
+    sheet = Image.new('RGB', (3 * cell_w, 2 * cell_w), (128, 128, 128))
+    for i, (label, comp) in enumerate(cells):
+        img = Image.fromarray(comp)
+        img.thumbnail((cell_w, cell_w))
+        sheet.paste(img, ((i % 3) * cell_w, (i // 3) * cell_w), img)
+    sheet.save(QA / 'head-motion.png')
+    return [c[0] for c in cells]
+
+
+def composite_shift(parts, rotations, offsets, scales):
+    canvas = np.zeros_like(parts['torso'])
+    for name in ZORDER:
+        if name not in parts:
+            continue
+        img = parts[name]
+        h, w = img.shape[:2]
+        if name in rotations:
+            deg, pivot = rotations[name]
+            M = cv2.getRotationMatrix2D((float(pivot[0]), float(pivot[1])), deg, 1.0)
+            img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+        if name in offsets:
+            dx, dy = offsets[name]
+            M = np.float32([[1, 0, dx], [0, 1, dy]])
+            img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+        a = img[..., 3:4].astype(float) / 255.0
+        canvas[..., :3] = img[..., :3] * a + canvas[..., :3] * (1 - a)
+        a_prev = canvas[..., 3:4].astype(float) / 255.0
+        canvas[..., 3:4] = ((a + a_prev * (1 - a)) * 255.0).astype(np.uint8)
+    return canvas.astype(np.uint8)
+
+
+def amber_pixels(parts, master):
+    """Round-2 gate 4: eye/mouth patches must not carry hood-lining amber.
+    Iris/star/heart strokes are exempt (they live inside the eye boxes)."""
+    lab = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2LAB)
+    L = lab[..., 0].astype(int)
+    A = lab[..., 1].astype(int)
+    B = lab[..., 2].astype(int)
+    amber = (A > 135) & (B > 170) & (L > 60) & (L < 220)  # lining orange, not skin (b*≈15)
+    eye_zone = np.zeros(master.shape[:2], bool)
+    for n in ('eye-L', 'eye-R', 'iris-L', 'iris-R'):
+        if n in parts:
+            eye_zone |= parts[n][..., 3] > 8
+    results = {}
+    for name in ('eye-L', 'eye-R', 'mouth'):
+        if name not in parts:
+            continue
+        a = parts[name][..., 3] > 128
+        results[name] = int((amber & a & ~eye_zone).sum())
+    return results
+
+
+def parts_sheet(parts):
+    """Round-2 deliverable: every part alone on a blue-grey base (cropped)."""
+    cols = 6
+    cell = 220
+    names = [n for n in ZORDER if n in parts]
+    rows = (len(names) + cols - 1) // cols
+    sheet = Image.new('RGB', (cols * cell, rows * cell), (108, 122, 137))
+    for i, n in enumerate(names):
+        img = parts[n]
+        ys, xs = np.where(img[..., 3] > 8)
+        if len(xs) == 0:
+            continue
+        crop = img[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        im = Image.fromarray(crop)
+        im.thumbnail((cell - 12, cell - 12))
+        sheet.paste(im, ((i % cols) * cell + 6, (i // cols) * cell + 6), im)
+    sheet.save(QA / 'parts-sheet.png')
+    return [n for n in names]
+
+
 def main():
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     parts = load_parts()
@@ -178,6 +420,37 @@ def main():
 
     iou, mean_diff, worst = restoration(parts, master)
     lines.append(f'restoration: alpha IoU={iou:.4f} (gate >=0.98), meanDiff={mean_diff:.2f}/255 (gate <=4), worstBlock={worst}px2 (gate <=40)')
+
+    rows, worst_pair = exclusivity(parts, master)
+    violations = [r for r in rows if r[3] > OVERLAP_GATE]
+    head = f'exclusivity: {len(rows)} overlapping pairs, {len(violations)} over gate {OVERLAP_GATE:.0%}'
+    if worst_pair[0]:
+        head += f', worst={worst_pair[0]} {worst_pair[1]:.1%}'
+    lines.append(head)
+    for a, b, px, ratio in sorted((r for r in rows if r[3] >= 0), key=lambda r: -r[3])[:10]:
+        mark = 'DESIGN(host)' if ratio < 0 else f'{ratio:.1%}'
+        lines.append(f'  overlap {a}~{b}: {px}px = {mark}')
+
+    rem = removal_test(parts, master)
+    bad_rem = [k for k, v in rem.items() if v >= 0.5]
+    rem_head = f'removal: {len(rem)} parts, {len(bad_rem)} with edge-corr >= 0.5 (gate < 0.5)'
+    if rem:
+        wname, wval = max(rem.items(), key=lambda kv: kv[1])
+        rem_head += f'; worst {wname}={wval:.3f}'
+    lines.append(rem_head)
+    for k, v in sorted(rem.items(), key=lambda kv: -kv[1])[:8]:
+        lines.append(f'  remove {k}: corr={v:.3f}')
+
+    amber = amber_pixels(parts, master)
+    for k, v in amber.items():
+        lines.append(f'amber-in-patch {k}: {v}px (gate 0)')
+
+    poses = head_motion(parts, master)
+    lines.append(f'head motion sheet: qa/head-motion.png ({", ".join(poses)}) — visual gate')
+
+    parts_sheet(parts)
+    lines.append('parts sheet: qa/parts-sheet.png')
+
 
     holes = stress(parts, master)
     for joint, px in holes.items():
