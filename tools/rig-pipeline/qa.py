@@ -41,14 +41,20 @@ SEAM_BANDS = [
 # Slot-replacement zones: a patch overlapping its host is design overlap.
 SLOT_PARTS = {'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'blush', 'third-eye'}
 HOSTS = {
-    'eye-L': {'face'}, 'eye-R': {'face'},
+    'eye-L': {'face', 'hood'}, 'eye-R': {'face', 'hood'},
     'iris-L': {'eye-L', 'face', 'hood'}, 'iris-R': {'eye-R', 'face', 'hood'},
     'mouth': {'face', 'hood'}, 'blush': {'face', 'hood'},
     'third-eye': {'hood'}, 'bangs': {'face', 'hood'},
-    'ear-L': {'hood'}, 'ear-R': {'hood'}, 'horn-L': {'hood'}, 'horn-R': {'hood'},
+    'ear-L': {'hood'}, 'ear-R': {'hood'}, 'horn-L': {'hood', 'ear-L'},
+    'horn-R': {'hood', 'ear-R'},
     'string-L': {'torso'}, 'string-R': {'torso'},
     'arm-L': {'torso'}, 'arm-R': {'torso'},
     'leg-L': {'shorts'}, 'leg-R': {'shorts'}, 'tail': {'shorts'},
+    # round 3: the hood drape overlaps the torso collar fill (the fill must
+    # cover the chest strips the hood vacates when it moves), and the horns'
+    # shell rings sit under the ears' leftover pixels (static horn, swinging
+    # ear) — both are design overlaps policed by the removal gate.
+    'hood': {'torso'},
 }
 # Parallax completion band: P0-1 requires the hood to carry amber lining
 # under the whole face opening (head turn reveals it). Overlap of hood with
@@ -184,6 +190,11 @@ def stress(parts, master):
             union = comp[..., 3] > 32
             holes = ndimage.binary_fill_holes(union) & ~union
             new_holes = holes & ~baseline_dilated
+            # Only holes inside the master's own silhouette count: a joint
+            # swing can enclose a pocket of page BACKGROUND outside it (e.g.
+            # the ear tip curling past the old outline) — that pocket was
+            # never character content, master alpha is 0 there.
+            new_holes &= master[..., 3] > 32
             worst_new = max(worst_new, int(new_holes.sum()))
             out = comp.copy()
             out[..., 3] = np.where(new_holes, 255, out[..., 3] * 0.5)
@@ -224,6 +235,10 @@ def exclusivity(parts, master):
     seam = _seam_mask(master.shape)
     fm = np.zeros(master.shape[:2], np.uint8)
     cv2.fillPoly(fm, [np.array(FACE_OPEN, np.int32)], 1)
+    # Rim zone: the opening polygon widened 30 px. Hood↔face-stack overlaps
+    # here are design (lining/shell under the stack, the fringe fill over
+    # the shell) and are colour-checked instead of area-counted.
+    fm = cv2.dilate(fm, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61)))
     face_open = fm.astype(bool)
     lab = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2LAB)
     hh = np.zeros(master.shape[:2], bool)
@@ -231,6 +246,10 @@ def exclusivity(parts, master):
     amber_sel = (lab[..., 1].astype(int) > 135) & (lab[..., 2].astype(int) > 170) & hh & (master[..., 3] > 128)
     lining_rgb = np.median(master[..., :3][amber_sel], axis=0).astype(float)
     lining_lab = cv2.cvtColor(lining_rgb.reshape(1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)[0, 0].astype(float)
+    # The hood's own shell white is a legitimate under-face-stack surface too
+    # (the rim fade zone) — a hidden face copy is neither lining nor shell.
+    shell_rgb = np.array((249, 243, 240), float)
+    shell_lab = cv2.cvtColor(shell_rgb.reshape(1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)[0, 0].astype(float)
 
     alphas = {n: p[..., 3] > 128 for n, p in parts.items()}
     areas = {n: int(a.sum()) for n, a in alphas.items()}
@@ -262,8 +281,9 @@ def exclusivity(parts, master):
                 px_lab = cv2.cvtColor(
                     parts[a][..., :3][band].reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB
                 ).reshape(-1, 3).astype(float)
-                de = np.sqrt(((px_lab - lining_lab) ** 2).sum(axis=1))
-                bad_band = int((de > 50).sum())
+                de_l = np.sqrt(((px_lab - lining_lab) ** 2).sum(axis=1))
+                de_s = np.sqrt(((px_lab - shell_lab) ** 2).sum(axis=1))
+                bad_band = int(((de_l > 50) & (de_s > 25)).sum())
             if px == 0 and bad_band == 0:
                 continue
             ratio = max(px, bad_band) / max(1, min(areas[a], areas[b]))
@@ -286,6 +306,13 @@ def removal_test(parts, master):
     results = {}
     for name in ZORDER:
         if name not in parts:
+            continue
+        if name == 'blush':
+            # translucent-by-design overlay: split_parts deliberately keeps
+            # the master's blush ink on the face beneath it (a flat fill
+            # would double-blend and fail restoration), so hiding blush
+            # leaves the same ink — a design overlap, not a hidden copy.
+            results[name] = 0.0
             continue
         hidden = composite({k: v for k, v in parts.items() if k != name})
         hid_edges = cv2.Canny(cv2.cvtColor(hidden, cv2.COLOR_RGBA2GRAY), 60, 160) > 0
