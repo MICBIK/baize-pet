@@ -63,12 +63,12 @@
    "id": "torso",
    "image": "parts/torso.png",
    "x": 283,
-   "y": 512,
+   "y": 462,
    "z": 30,
    "parent": "body",
    "pivot": [
-    431,
-    641
+    435,
+    616
    ]
   },
   {
@@ -87,12 +87,12 @@
    "id": "string-R",
    "image": "parts/string-R.png",
    "x": 442,
-   "y": 493,
+   "y": 498,
    "z": 35,
    "parent": "torso",
    "pivot": [
     476,
-    570
+    572
    ]
   },
   {
@@ -136,7 +136,7 @@
   {
    "id": "hood",
    "image": "parts/hood.png",
-   "x": 174,
+   "x": 173,
    "y": 97,
    "z": 50,
    "parent": "head",
@@ -153,20 +153,20 @@
    "z": 52,
    "parent": "head",
    "pivot": [
-    338,
-    134
+    340,
+    139
    ]
   },
   {
    "id": "horn-R",
    "image": "parts/horn-R.png",
-   "x": 500,
+   "x": 496,
    "y": 85,
    "z": 52,
    "parent": "head",
    "pivot": [
-    538,
-    137
+    542,
+    139
    ]
   },
   {
@@ -226,42 +226,42 @@
    "id": "face",
    "image": "parts/face.png",
    "x": 270,
-   "y": 240,
+   "y": 224,
    "z": 60,
    "parent": "head",
    "pivot": [
     435,
-    370
+    362
    ]
   },
   {
    "id": "bangs",
    "image": "parts/bangs.png",
-   "x": 294,
+   "x": 296,
    "y": 225,
    "z": 80,
    "parent": "head",
    "pivot": [
-    430,
+    431,
     309
    ]
   },
   {
    "id": "eye-L",
    "image": "parts/eye-L.png",
-   "x": 326,
-   "y": 352,
+   "x": 332,
+   "y": 358,
    "z": 70,
    "parent": "head",
    "pivot": [
-    370,
+    371,
     390
    ],
    "slots": {
     "open": {
      "image": "parts/eye-L.png",
-     "x": 326,
-     "y": 352
+     "x": 332,
+     "y": 358
     },
     "closed": {
      "image": "parts/eye-closed-L.png",
@@ -318,8 +318,8 @@
   {
    "id": "eye-R",
    "image": "parts/eye-R.png",
-   "x": 465,
-   "y": 351,
+   "x": 471,
+   "y": 357,
    "z": 70,
    "parent": "head",
    "pivot": [
@@ -329,8 +329,8 @@
    "slots": {
     "open": {
      "image": "parts/eye-R.png",
-     "x": 465,
-     "y": 351
+     "x": 471,
+     "y": 357
     },
     "closed": {
      "image": "parts/eye-closed-R.png",
@@ -411,8 +411,8 @@
   {
    "id": "mouth",
    "image": "parts/mouth.png",
-   "x": 403,
-   "y": 437,
+   "x": 409,
+   "y": 443,
    "z": 72,
    "parent": "head",
    "pivot": [
@@ -422,8 +422,8 @@
    "slots": {
     "smile": {
      "image": "parts/mouth.png",
-     "x": 403,
-     "y": 437
+     "x": 409,
+     "y": 443
     },
     "cat": {
      "image": "parts/mouth-cat.png",

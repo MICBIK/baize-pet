@@ -9,6 +9,7 @@ import json
 import shutil
 from pathlib import Path
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -86,6 +87,33 @@ def bbox_of(mask):
     return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
 
+def clean_edge_halo(img):
+    """Round-3: clear the light semi-transparent specks outside the outer
+    opaque ring of a part (LANCZOS resampling spreads a 1px bright halo
+    past the artwork's outline; visible as scattered light dots on dark
+    backgrounds). Exterior = flood from the image border over non-opaque
+    pixels; semi-transparent AND bright pixels out there lose their alpha.
+    Dark anti-aliased fringes are the outline's own AA and stay."""
+    a = img[..., 3]
+    gray = cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2GRAY)
+    opaque = a >= 200
+    h, w = a.shape
+    ff = (~opaque).astype(np.uint8)
+    reach = np.zeros((h + 2, w + 2), np.uint8)
+    for x in range(w):
+        for y in (0, h - 1):
+            if ff[y, x] == 1 and reach[y + 1, x + 1] == 0:
+                cv2.floodFill(ff, reach, (x, y), 2)
+    for y in range(h):
+        for x in (0, w - 1):
+            if ff[y, x] == 1 and reach[y + 1, x + 1] == 0:
+                cv2.floodFill(ff, reach, (x, y), 2)
+    exterior = ff == 2
+    clear = exterior & (a < 200) & (gray > 150)
+    img[..., 3][clear] = 0
+    return int(clear.sum())
+
+
 def main():
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     hood_w, ground_y, center_x = measure_anchor(master)
@@ -124,6 +152,9 @@ def main():
         crop = Image.fromarray(img[y0:y1, x0:x1])
         ow, oh = crop.size
         crop = crop.resize((max(1, round(ow * SCALE)), max(1, round(oh * SCALE))), Image.LANCZOS)
+        arr = np.array(crop)
+        clean_edge_halo(arr)
+        crop = Image.fromarray(arr)
         rel = f'parts/{pid}.png'
         crop.save(PACK / 'rig' / rel, optimize=True)
         # Slot-name-keyed defaults; A6 patches register more slots per part.
@@ -207,6 +238,9 @@ def main():
                     (max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))),
                     Image.LANCZOS,
                 )
+                arr = np.array(half)
+                clean_edge_halo(arr)
+                half = Image.fromarray(arr)
                 out_name = f'{name}-{side}.png' if side else f'{name}.png'
                 rel = f'parts/{out_name}'
                 half.save(PACK / 'rig' / rel, optimize=True)

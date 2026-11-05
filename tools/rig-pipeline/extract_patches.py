@@ -93,7 +93,73 @@ def head_register(master_gray, var, master_alpha=None):
     return warp, aligned
 
 
-def cut_patch(img, box, margin, feather, lining=None):
+def master_stroke_bbox(master, box, margin):
+    """Master's own eye/mouth stroke bbox inside a slot box (master-px
+    bbox of the crop), widened by 14 px — the geometry zone the patch's
+    drawing may live in. Hair strands, hood rim and lining fringes sit
+    outside it (or are identical to the master and unneeded)."""
+    x0, y0, x1, y1 = box
+    H, W = master.shape[:2]
+    a = max(0, x0 - margin)
+    b = min(W, x1 + margin)
+    c = max(0, y0 - margin)
+    d = min(H, y1 + margin)
+    crop = master[c:d, a:b]
+    lab = cv2.cvtColor(crop[..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    strokes = (lab[..., 0] < 95) & (crop[..., 3] > 128)
+    ys, xs = np.where(strokes)
+    if len(ys) < 30:
+        return None
+    return (c, a, int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+
+
+def content_mask(patch, master_crop, zone, feather, ring_px=6):
+    """Round-3 content-boundary patch mask: keep only what the expression
+    actually DREW DIFFERENTLY from the master (the new eye/mouth), plus a
+    flat-skin blend ring. Everything the patch carries unchanged from the
+    master (fringe strands, rim strokes, lining fringes, plain skin) is
+    drawn by the layers beneath, so keeping it would only ghost across the
+    face when the patch slides with the eye/mouth part.
+
+    zone = master stroke bbox + pad, constraining where new drawing may
+    live; blobs of change below 40 px are registration residue, dropped."""
+    h, w = patch.shape[:2]
+    rgb = patch[..., :3].astype(int)
+    lab = cv2.cvtColor(patch[..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    alpha = patch[..., 3]
+    solid = alpha > 8
+    diff = np.abs(rgb - master_crop[..., :3].astype(int)).mean(axis=2)
+    changed = (diff > 20) & solid
+    n, lbl = cv2.connectedComponents(changed.astype(np.uint8), connectivity=8)
+    kept_changed = np.zeros((h, w), bool)
+    dark = lab[..., 0] < 95
+    for i in range(1, n):
+        blob = lbl == i
+        if blob.sum() < 80:
+            continue  # registration residue, not a drawn feature
+        if not (dark & blob).any():
+            continue  # an eye/mouth drawing change always carries new strokes
+        kept_changed |= blob
+    sc, a0, x0s, y0s, x1s, y1s = zone
+    zone_mask = np.zeros((h, w), bool)
+    # stroke bbox coords are already crop-space == patch space; a tight 4 px
+    # pad keeps the margin band (where rim strokes live) out of the mask
+    zx0, zy0 = max(0, x0s - 4), max(0, y0s - 4)
+    zx1, zy1 = min(w, x1s + 4 + 1), min(h, y1s + 4 + 1)
+    zone_mask[zy0:zy1, zx0:zx1] = True
+    changed_zone = kept_changed & zone_mask
+    if changed_zone.sum() < 40:
+        return None
+    grown = cv2.dilate(changed_zone.astype(np.uint8),
+                       np.ones((2 * ring_px + 1, 2 * ring_px + 1), np.uint8)) > 0
+    skinish = ((np.abs(rgb[..., 0] - 248) < 22) & (np.abs(rgb[..., 1] - 225) < 24)
+               & (np.abs(rgb[..., 2] - 205) < 30))
+    keep = changed_zone | (skinish & solid & grown)
+    soft = cv2.GaussianBlur(keep.astype(float), (2 * feather + 1, 2 * feather + 1), 0)
+    return np.clip(soft * alpha, 0, 255).astype(np.uint8)
+
+
+def cut_patch(img, box, margin, feather, lining=None, master=None, zone=None):
     x0, y0, x1, y1 = box
     H, W = img.shape[:2]
     a = max(0, x0 - margin)
@@ -105,7 +171,14 @@ def cut_patch(img, box, margin, feather, lining=None):
         # rework P0-3: never carry hood-lining amber — the patch mask is
         # subtracted by the lining zone in this region, feathered after
         patch[..., 3][lining[c:d, a:b]] = 0
-    if feather > 0:
+    if zone is not None and master is not None:
+        master_crop = master[c:d, a:b]
+        m = content_mask(patch, master_crop, zone, feather)
+        if m is not None:
+            patch[..., 3] = m
+        else:
+            print('    change area degenerate, feathered rectangle kept')
+    else:
         alpha = patch[..., 3].astype(float)
         k = 2 * feather + 1
         soft = cv2.GaussianBlur(alpha, (k, k), 0)
@@ -129,6 +202,18 @@ def main():
         & (hood[..., 3] > 8)
     )
 
+    # master stroke geometry per slot (round-3 content-boundary masks).
+    # Eyes: the master's stroke bbox. Mouth: the box interior — the master's
+    # smile line is too light for a reliable stroke bbox, and its chin
+    # shading would pull the zone down onto the hood rim; the box interior
+    # excludes the rim by construction.
+    zones = {}
+    for side, box in EYE_BOXES.items():
+        zones[f'eye-{side}'] = master_stroke_bbox(master, box, MARGIN)
+    bx0, by0, bx1, by1 = MOUTH_BOX
+    zones['mouth'] = (by0 - MARGIN, bx0 - MARGIN,
+                      MARGIN, MARGIN, MARGIN + (bx1 - bx0), MARGIN + (by1 - by0))
+
     report = {}
     for p in sorted(SRC.glob('*.png')):
         var = load_rgba(p)
@@ -141,12 +226,15 @@ def main():
         entry = {}
         if name.startswith('eye-'):
             for side, box in EYE_BOXES.items():
-                patch, ox, oy = cut_patch(aligned, box, MARGIN, FEATHER, lining)
+                zone = zones[f'eye-{side}']
+                patch, ox, oy = cut_patch(aligned, box, MARGIN, FEATHER, lining,
+                                          master=master, zone=zone)
                 out = OUT / f'{name}-{side}.png'
                 cv2.imwrite(str(out), patch)
                 entry[side] = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}
         elif name.startswith('mouth-'):
-            patch, ox, oy = cut_patch(aligned, MOUTH_BOX, MARGIN, FEATHER, lining)
+            patch, ox, oy = cut_patch(aligned, MOUTH_BOX, MARGIN, FEATHER, lining,
+                                      master=master, zone=zones['mouth'])
             out = OUT / f'{name}.png'
             cv2.imwrite(str(out), patch)
             entry = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}

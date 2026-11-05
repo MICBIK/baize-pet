@@ -66,6 +66,19 @@ FACE_OPEN = [
 ]
 OVERLAP_GATE = 0.03  # violation area / smaller part area
 
+# Round-3 gate: straight-line seams (the 1-2 px amber/brown lines seen on
+# face/hood during look-around etc.).
+SEAM_LINE_LEN = 25   # px, master scale
+SEAM_ANG_TOL = 6     # degrees around horizontal / vertical
+# runtime solver parallax factors (solver.ts FAC, kx = 368*0.06, ky = 300*0.04)
+SEAM_KX = 368 * 0.06
+SEAM_KY = 300 * 0.04
+SEAM_FAC = {
+    'hood': -0.35, 'ear-L': -0.45, 'ear-R': -0.45, 'face': 0.4,
+    'eye-L': 1.0, 'eye-R': 1.0, 'iris-L': 1.0, 'iris-R': 1.0,
+    'mouth': 1.0, 'bangs': 1.0, 'blush': 0.4, 'third-eye': 0.6,
+}
+
 JOINTS = {
     'arm-L': (-40, 150, None),
     'arm-R': (-150, 40, None),
@@ -399,6 +412,88 @@ def composite_shift(parts, rotations, offsets, scales):
     return canvas.astype(np.uint8)
 
 
+def _seam_line_mask(img, interior, exempt):
+    gray = cv2.cvtColor(img, cv2.COLOR_RGBA2GRAY)
+    edges = cv2.Canny(gray, 40, 120)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=40,
+                            minLineLength=SEAM_LINE_LEN, maxLineGap=2)
+    hits = np.zeros(img.shape[:2], bool)
+    found = []
+    if lines is None:
+        return hits, found
+    for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4):
+        ang = np.degrees(np.arctan2(y2 - y1, x2 - x1)) % 180
+        if not (min(ang, 180 - ang) <= SEAM_ANG_TOL or abs(ang - 90) <= SEAM_ANG_TOL):
+            continue
+        n = int(max(abs(x2 - x1), abs(y2 - y1))) + 1
+        xs = np.linspace(x1, x2, n).astype(int)
+        ys = np.linspace(y1, y2, n).astype(int)
+        ok = (xs >= 0) & (xs < img.shape[1]) & (ys >= 0) & (ys < img.shape[0])
+        xs, ys = xs[ok], ys[ok]
+        if not len(xs):
+            continue
+        inside = interior[ys, xs].mean()
+        on_edge = exempt[ys, xs].mean()
+        if inside > 0.9 and on_edge < 0.5:
+            hits[ys, xs] = True
+            found.append((int(x1), int(y1), int(x2), int(y2)))
+    return hits, found
+
+
+def seam_lines(parts, master):
+    """Round-3 gate: in the six head poses, Hough-detect straight lines
+    (>= 25 px, near-horizontal or near-vertical) inside the character that
+    are NOT a moved copy of a rest-state edge. A part carrying its own
+    content with its parallax offset is legitimate motion; a NEW straight
+    edge is a seam (flat-fill boundary, patch rectangle, torn stroke).
+    Gate: 0 lines per pose. Also reports new interior holes per pose."""
+    alpha_full = master[..., 3] > 128
+    interior = cv2.erode(alpha_full.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+    rest = composite(parts)
+    rest_edges = cv2.dilate(
+        cv2.Canny(cv2.cvtColor(rest, cv2.COLOR_RGBA2GRAY), 40, 120),
+        np.ones((11, 11), np.uint8)) > 0
+    rest_union = rest[..., 3] > 32
+    baseline = ndimage.binary_fill_holes(rest_union) & ~rest_union
+    base_dil = cv2.dilate(baseline.astype(np.uint8), np.ones((41, 41), np.uint8)) > 0
+
+    poses = [('tilt-12', {'head.tilt': -12}), ('tilt+12', {'head.tilt': 12}),
+             ('turnX-1', {'head.turnX': -1}), ('turnX+1', {'head.turnX': 1}),
+             ('turnY-1', {'head.turnY': -1}), ('turnY+1', {'head.turnY': 1})]
+    results = {}
+    sheet = Image.new('RGB', (3 * 300, 2 * 300), (128, 128, 128))
+    for idx, (label, params) in enumerate(poses):
+        offsets = {}
+        if 'head.turnX' in params:
+            k = params['head.turnX'] * SEAM_KX
+            offsets = {n: (k * f, 0.0) for n, f in SEAM_FAC.items() if n in parts}
+        elif 'head.turnY' in params:
+            k = params['head.turnY'] * SEAM_KY
+            offsets = {n: (0.0, k * f) for n, f in SEAM_FAC.items() if n in parts}
+        comp = composite_shift(parts, {}, offsets, {})
+        exempt = rest_edges.copy()
+        h, w = exempt.shape
+        for dx, dy in set(offsets.values()):
+            if dx == 0 and dy == 0:
+                continue
+            M = np.float32([[1, 0, -dx], [0, 1, -dy]])
+            exempt |= cv2.warpAffine(rest_edges.astype(np.uint8), M, (w, h),
+                                     flags=cv2.INTER_NEAREST, borderValue=0) > 0
+        hits, found = _seam_line_mask(comp, interior, exempt)
+        union = comp[..., 3] > 32
+        holes = ndimage.binary_fill_holes(union) & ~union
+        holes &= ~base_dil
+        holes &= master[..., 3] > 32
+        results[label] = (len(found), int(holes.sum()))
+        vis = comp.copy()
+        vis[hits] = (255, 0, 90, 255)
+        img = Image.fromarray(vis)
+        img.thumbnail((300, 300))
+        sheet.paste(img, ((idx % 3) * 300, (idx // 3) * 300), img)
+    sheet.save(QA / 'seam-lines.png')
+    return results
+
+
 def amber_pixels(parts, master):
     """Round-2 gate 4: eye/mouth patches must not carry hood-lining amber.
     Iris/star/heart strokes are exempt (they live inside the eye boxes)."""
@@ -474,6 +569,16 @@ def main():
 
     poses = head_motion(parts, master)
     lines.append(f'head motion sheet: qa/head-motion.png ({", ".join(poses)}) — visual gate')
+
+    seams = seam_lines(parts, master)
+    bad_seams = {k: v for k, v in seams.items() if v[0] > 0}
+    worst_holes = max(v[1] for v in seams.values())
+    lines.append(f'seam-lines: ' + ', '.join(f'{k}={v[0]}' for k, v in seams.items())
+                 + f' (gate 0 per pose); turn holes px: '
+                 + ', '.join(f'{k}={v[1]}' for k, v in seams.items())
+                 + f' (worst {worst_holes}px)')
+    sheet_line = 'qa/seam-lines.png'
+    lines.append(f'seam overlay sheet: {sheet_line}')
 
     parts_sheet(parts)
     lines.append('parts sheet: qa/parts-sheet.png')

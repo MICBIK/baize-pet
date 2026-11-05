@@ -127,7 +127,7 @@ def main():
     # folds are part of the rest composite, so they are covered too.
     rest_edges = cv2.dilate(
         cv2.Canny(cv2.cvtColor(rest, cv2.COLOR_RGBA2GRAY), 40, 120),
-        np.ones((7, 7), np.uint8)) > 0
+        np.ones((11, 11), np.uint8)) > 0
 
     def exempt_for(offsets):
         ex = rest_edges.copy()
