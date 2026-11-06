@@ -5,6 +5,20 @@
  "layer": "action",
  "expression": "laugh",
  "tracks": {
+  "arm.R.slot": [
+   [
+    0,
+    "down"
+   ],
+   [
+    90,
+    "wave"
+   ],
+   [
+    1540,
+    "down"
+   ]
+  ],
   "arm.R.rot": [
    [
     0,
@@ -12,27 +26,27 @@
    ],
    [
     280,
-    -125,
+    -104,
     "easeOutBack"
    ],
    [
     620,
-    -145,
+    -116,
     "easeInOutSine"
    ],
    [
     900,
-    -122,
+    -100,
     "easeInOutSine"
    ],
    [
     1180,
-    -145,
+    -116,
     "easeInOutSine"
    ],
    [
     1450,
-    -122,
+    -100,
     "easeInOutSine"
    ],
    [

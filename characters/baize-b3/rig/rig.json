@@ -15,12 +15,12 @@
    "id": "tail",
    "image": "parts/tail.png",
    "x": 529,
-   "y": 760,
+   "y": 757,
    "z": 0,
    "parent": "body",
    "pivot": [
     613,
-    819
+    817
    ]
   },
   {
@@ -51,12 +51,12 @@
    "id": "shorts",
    "image": "parts/shorts.png",
    "x": 306,
-   "y": 758,
+   "y": 755,
    "z": 20,
    "parent": "body",
    "pivot": [
     441,
-    814
+    813
    ]
   },
   {
@@ -75,12 +75,12 @@
    "id": "string-L",
    "image": "parts/string-L.png",
    "x": 366,
-   "y": 512,
+   "y": 509,
    "z": 35,
    "parent": "torso",
    "pivot": [
     390,
-    578
+    576
    ]
   },
   {
@@ -99,18 +99,18 @@
    "id": "arm-L",
    "image": "parts/arm-L.png",
    "x": 227,
-   "y": 548,
+   "y": 545,
    "z": 40,
    "parent": "torso",
    "pivot": [
-    294,
-    568
+    331,
+    569
    ],
    "slots": {
     "down": {
      "image": "parts/arm-L.png",
      "x": 227,
-     "y": 548
+     "y": 545
     }
    }
   },
@@ -118,18 +118,23 @@
    "id": "arm-R",
    "image": "parts/arm-R.png",
    "x": 516,
-   "y": 548,
+   "y": 545,
    "z": 40,
    "parent": "torso",
    "pivot": [
-    583,
-    568
+    544,
+    569
    ],
    "slots": {
     "down": {
      "image": "parts/arm-R.png",
      "x": 516,
-     "y": 548
+     "y": 545
+    },
+    "wave": {
+     "image": "parts/arm-R-wave.png",
+     "x": 516,
+     "y": 546
     }
    }
   },
@@ -148,12 +153,12 @@
   {
    "id": "horn-L",
    "image": "parts/horn-L.png",
-   "x": 302,
+   "x": 300,
    "y": 85,
    "z": 52,
    "parent": "head",
    "pivot": [
-    340,
+    339,
     139
    ]
   },
@@ -212,13 +217,13 @@
     },
     "half": {
      "image": "parts/third-eye-half.png",
-     "x": 374,
-     "y": 114
+     "x": 366,
+     "y": 137
     },
     "open": {
      "image": "parts/third-eye-open.png",
-     "x": 374,
-     "y": 114
+     "x": 366,
+     "y": 137
     }
    }
   },
@@ -411,24 +416,19 @@
   {
    "id": "mouth",
    "image": "parts/mouth.png",
-   "x": 409,
+   "x": 421,
    "y": 443,
    "z": 72,
    "parent": "head",
    "pivot": [
-    433,
-    457
+    439,
+    447
    ],
    "slots": {
     "smile": {
      "image": "parts/mouth.png",
-     "x": 409,
+     "x": 421,
      "y": 443
-    },
-    "cat": {
-     "image": "parts/mouth-cat.png",
-     "x": 388,
-     "y": 428
     },
     "mid": {
      "image": "parts/mouth-mid.png",
