@@ -23,6 +23,7 @@ shell) shows through everywhere else.
 
 The closed slot stays the master's own third-eye part.
 """
+import os
 import json
 from pathlib import Path
 
@@ -30,7 +31,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 SRC = ART / 'registered'
 OUT = ART / 'patches'

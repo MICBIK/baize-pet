@@ -14,10 +14,12 @@ overlay review + geometric checks in the usage region). Outputs registered/
 
 from pathlib import Path
 
+import os
 import cv2
 import numpy as np
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 MASTER = ART / 'master.png'
 VARIANTS = ART / 'variants'

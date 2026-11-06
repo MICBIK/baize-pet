@@ -5,6 +5,7 @@ scale into characters/baize-b3/rig/parts, rig.json with offsets and the
 measured anchor, behaviour data copied from characters/b3, sprite sheets,
 LICENSE and README.
 """
+import os
 import json
 import shutil
 from pathlib import Path
@@ -13,7 +14,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 PACK = ROOT / 'characters/baize-b3'
 B3_MANIFEST = ROOT / 'characters/b3/manifest.json'

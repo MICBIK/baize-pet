@@ -16,11 +16,13 @@ can regrow fragments); then qa.py and export_pack.py regenerate downstream.
 
 from pathlib import Path
 
+import os
 import cv2
 import numpy as np
 from PIL import Image
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 
 # Parts that must be one piece; fragments found by the QA sheet review.

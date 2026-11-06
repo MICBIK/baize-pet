@@ -7,13 +7,15 @@ region onto the master (same ECC machinery as A3), then cut the eye boxes and
 mouth box (10 px margin, 3 px feather) with their surrounding skin, and save
 patch PNGs + offsets so rig.json can register them as slots.
 """
+import os
 import json
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 SRC = ART / 'expressions'
 OUT = ART / 'patches'

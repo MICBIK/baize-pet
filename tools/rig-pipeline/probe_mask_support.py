@@ -9,10 +9,12 @@ there. If the upstream accepts the call, A0 reports "mask supported".
 """
 from pathlib import Path
 
+import os
 import numpy as np
 from PIL import Image
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 master = Image.open(ROOT / 'demo/rig-art/master.png').convert('RGBA')
 w, h = master.size
 

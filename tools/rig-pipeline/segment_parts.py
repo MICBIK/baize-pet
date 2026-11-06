@@ -7,6 +7,7 @@ cleans it morphologically, subtracts upper-layer parts, and writes
 demo/rig-art/parts-full/<id>.png plus a labelled QA overlay.
 Iris parts use the parent eye mask with an amber/pupil colour filter.
 """
+import os
 import json
 from pathlib import Path
 
@@ -16,7 +17,8 @@ import torch
 from PIL import Image
 from segment_anything import SamPredictor, sam_model_registry
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 MASTER = ART / 'master.png'
 PROMPTS = ROOT / 'tools/rig-pipeline/parts.prompts.json'

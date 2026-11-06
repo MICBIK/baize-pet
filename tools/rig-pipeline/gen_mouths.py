@@ -8,13 +8,15 @@ horizontally + stretch slightly for the round o. Offsets shift so the
 corner line stays at the master's mouth y. Quality is judged visually in
 the viewer; these are slot fallbacks for lip-sync, not hero art.
 """
+import os
 import json
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 MOUTH_Y = 455  # mouth-corner line in master px (MOUTH_BOX centre y ≈ 455)
 

@@ -16,6 +16,7 @@ inpaint / the registered arms-behind variant (task book A4 + A5).
 Extension bands paint the part's own body colour (never the master's
 pixels). Output overwrites parts-ext/; round 1 is kept at parts-ext-round1/.
 """
+import os
 import shutil
 from pathlib import Path
 
@@ -24,7 +25,8 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 SRC = ART / 'parts-full'
 DST = ART / 'parts-ext'

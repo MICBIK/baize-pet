@@ -7,12 +7,14 @@ Writes numbers to stdout and qa/qa-report.txt; QA images to demo/rig-art/qa/.
 """
 from pathlib import Path
 
+import os
 import cv2
 import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-ROOT = Path('/Users/baihaibin/Documents/WorkSpares/BaiZe')
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
 QA = ART / 'qa'
 QA.mkdir(parents=True, exist_ok=True)
