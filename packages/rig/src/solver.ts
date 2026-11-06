@@ -28,7 +28,11 @@ export interface SolvedPart {
   rotDeg: number
   scaleX: number
   scaleY: number
-  /** Viewer-left parts reuse the R image mirrored horizontally. */
+  /**
+   * Draw the image flipped horizontally. Only set when a viewer-left arm
+   * borrows a viewer-right (`arm-R*`) image; a pack that ships its own
+   * left-arm art must render it as authored.
+   */
   mirrored: boolean
   opacity: number
   blend: 'normal' | 'lighter'
@@ -149,6 +153,12 @@ export function partClass(id: string): string {
   return 'body'
 }
 
+/** True when an image path points at viewer-right art (`.../arm-R...`). */
+function isBorrowedRightImage(image: string): boolean {
+  const base = image.slice(image.lastIndexOf('/') + 1)
+  return base.startsWith('arm-R')
+}
+
 /** Neck pivot from the head group (fallback: mid-height). */
 function headPivot(manifest: RigManifest): RigPoint {
   const g = manifest.groups.head
@@ -204,7 +214,6 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
     let image = part.image
     let px = part.x ?? part.pivot[0]
     let py = part.y ?? part.pivot[1]
-    const mirrored = part.id.endsWith('-L') && cls === 'arm'
     let opacity = 1
     const blend: SolvedPart['blend'] = part.blend ?? 'normal'
 
@@ -236,6 +245,10 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
 
     // Missing image on a non-slot part: skip (e.g. optional bangs).
     if (!image) continue
+
+    // Mirror only borrowed art: flipping the pack's own arm-L image in place
+    // turns its hidden torso-side cut outward (round-4 "white blade" bug).
+    const mirrored = cls === 'arm' && part.id.endsWith('-L') && isBorrowedRightImage(image)
 
     // Per-part rotation overrides from params.
     let extraRot = 0

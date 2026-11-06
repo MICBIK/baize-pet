@@ -138,6 +138,20 @@ describe('solve()', () => {
     expect(arm?.mirrored).toBe(true)
   })
 
+  it('does not mirror a viewer-left arm that ships its own image', () => {
+    const own: typeof mini = {
+      ...mini,
+      parts: mini.parts.map((part) =>
+        part.id === 'arm-L'
+          ? { ...part, slots: { down: { image: 'parts/arm-L.png', x: 200, y: 455 } } }
+          : part,
+      ),
+    }
+    const arm = solve(own, p).find((s) => s.id === 'arm-L')
+    expect(arm?.image).toBe('parts/arm-L.png')
+    expect(arm?.mirrored).toBe(false)
+  })
+
   it('falls back to a default slot when the requested one is missing', () => {
     const out = solve(mini, clampParams({ 'eye.R.open': 0.2 })) // closed missing on eye-R
     const eyeR = out.find((s) => s.id === 'eye-R')
