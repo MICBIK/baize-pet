@@ -68,7 +68,7 @@
    "parent": "body",
    "pivot": [
     435,
-    616
+    615
    ]
   },
   {
@@ -103,7 +103,7 @@
    "z": 40,
    "parent": "torso",
    "pivot": [
-    290,
+    294,
     568
    ],
    "slots": {
@@ -117,18 +117,18 @@
   {
    "id": "arm-R",
    "image": "parts/arm-R.png",
-   "x": 518,
+   "x": 516,
    "y": 548,
    "z": 40,
    "parent": "torso",
    "pivot": [
-    584,
+    583,
     568
    ],
    "slots": {
     "down": {
      "image": "parts/arm-R.png",
-     "x": 518,
+     "x": 516,
      "y": 548
     }
    }

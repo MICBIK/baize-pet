@@ -50,14 +50,29 @@ FACE_OPEN = [  # hood inner rim: face + surrounding hair live inside
     (295, 240), (272, 320), (270, 390), (295, 455), (330, 488), (400, 500),
     (470, 500), (545, 483), (580, 450), (600, 385), (598, 315), (575, 250),
 ]
+# Sleeve polygons. Below the armpit the inner edge follows the torso side of
+# the master's own sleeve seam ink (read per 5 px row from master.png), so the
+# sleeve keeps its closed outline and carries no torso cloth: round 3 cut it
+# with a straight vertical line ~15 px inside the torso, and that outline-less
+# strip (with a pocket fragment) swung out as a white "blade" whenever the
+# arm rotated. Above the armpit the sleeve has no seam (raglan shoulder); the
+# cut there stays inside the torso / under the hood.
 ARM_L = [  # left sleeve: shoulder top -> outer edge -> cuff -> inner seam
-    (285, 512), (225, 540), (195, 620), (205, 700), (230, 752), (330, 756),
-    (348, 740), (352, 650), (345, 560), (300, 528),
+    (285, 512), (225, 540), (195, 620), (205, 700), (230, 752), (313, 756),
+    (315, 750), (321, 740), (336, 734), (335, 720), (339, 710), (341, 690),
+    (346, 670), (349, 650), (353, 630), (357, 610), (359, 590), (360, 580),
+    (350, 560), (300, 528),
 ]
-ARM_R = [  # right sleeve, mirrored about the body axis (~x 435)
-    (585, 512), (645, 540), (675, 620), (665, 700), (640, 752), (540, 756),
-    (522, 740), (518, 650), (525, 560), (570, 528),
+ARM_R = [  # right sleeve: same reading of the right seam
+    (585, 512), (645, 540), (675, 620), (665, 700), (640, 752), (546, 756),
+    (545, 745), (543, 735), (541, 725), (538, 710), (537, 700), (535, 690),
+    (532, 680), (530, 670), (528, 660), (526, 650), (524, 640), (522, 630),
+    (521, 620), (519, 610), (518, 600), (516, 585), (525, 560), (570, 528),
 ]
+# Armpit rows: below these the sleeve seam is the arm's own outline, so the
+# shoulder extension (torso cloth riding the arm) stops here.
+ARMPIT_Y = {'arm-L': 580, 'arm-R': 585}
+CUFF_BOTTOM_Y = 752  # hands hang below this row
 TORSO = [  # hoodie body between the sleeve seams, collar to hem
     (300, 505), (570, 505), (588, 560), (588, 700), (570, 762), (300, 762),
     (283, 700), (283, 560),
@@ -346,9 +361,23 @@ def main():
     # over the face) — existing slot flat plus the patch rectangles grown
     # 8 px, ring only over skin-like master pixels, feathered 4 px.
     flat(images['face'], slot_zone & face_open & ~claim['face'], skin_rgb, tag=2)
-    skin_core = rect_grow & face_open & alpha & ~claim['bangs'] & ~claim['hood']
+    # Round 4: clip to the face's skin silhouette (+ 6 px). The patch
+    # rectangles reach past the cheek outline into the
+    # hair/lining strip; skin painted there hid under the fringe at rest but
+    # showed as skin-coloured bars beside both cheeks whenever idle parallax
+    # slid the fringe.
+    # (blush stays out: its claim is loose and reaches into the side hair)
+    face_sil = fskin.copy()  # master skin inside the hood opening
+    for pid in ('eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth'):
+        if pid in claim:
+            face_sil |= claim[pid]
+    # close small gaps (eye-white rims, lashes) without filling the hair
+    face_sil = ndimage.binary_closing(face_sil, structure=np.ones((7, 7), bool))
+    face_reach = dilate_mask(face_sil, 6)
+    skin_core = (rect_grow & face_open & alpha & ~claim['bangs'] & ~claim['hood']
+                 & face_reach)
     skin_ring = (dilate_mask(skin_core, 10) & face_open & alpha & ~claim['bangs']
-                 & ~claim['hood'] & ~above_face)
+                 & ~claim['hood'] & ~above_face & face_reach)
     underlay(images['face'], skin_core, skin_ring, skin_rgb, F=4)
 
     # hood: white socket under the third-eye (factor 0.6 slides ~21 px over
@@ -417,12 +446,35 @@ def main():
         grow = cv2.dilate(claim[arm].astype(np.uint8), cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (51, 51))).astype(bool)
         ext = grow & torso_zone & alpha & ~claim[arm] & ~claim[other_arm] & ~claim['torso'] & ~claim['hood'] & ~claim['string-L'] & ~claim['string-R']
-        take = ext & (images['torso'][..., 3] > 8)
+        # the whole band stays reserved (other parts' extensions keep their
+        # round-3 reach), but the arm only TAKES the shoulder band: below the
+        # armpit the seam ink closes the sleeve and any torso strip past it
+        # would swing out as an outline-less edge
+        ext_used |= ext
+        ext = ext.copy()
+        ext[ARMPIT_Y[arm]:, :] = False
+        # only real torso cloth rides the arm (no collar sweep / lining fill)
+        take = ext & (images['torso'][..., 3] > 8) & (provenance != 3) & (provenance != 2)
         images[arm][take] = images['torso'][take]
         provenance[take] = 1
         # rest of the band stays empty: the arm renders above the torso, and
         # a flat patch there would be visible at rest over the master's ink
-        ext_used |= ext
+        # the sleeve has no amber trim: amber pixels on it are pocket tips
+        # where the pocket meets the seam — they belong to the torso (which
+        # draws them at rest) and would ride the arm as loose orange chips
+        hsv = cv2.cvtColor(images[arm][..., :3], cv2.COLOR_RGB2HSV)
+        chip = ((images[arm][..., 3] > 8) & (hsv[..., 0] >= 5) & (hsv[..., 0] <= 30)
+                & (hsv[..., 1] > 110) & (hsv[..., 2] > 110))
+        # plus its anti-aliased fringe (still visibly tinted); rows above the
+        # cuff bottom only — the hand's warm shading below must stay
+        chip |= dilate_mask(chip, 1) & (images[arm][..., 3] > 8) & (hsv[..., 1] > 60)
+        chip[CUFF_BOTTOM_Y:, :] = False
+        images[arm][chip] = 0
+        claim[arm] &= ~chip
+        images['torso'][chip] = master[chip]
+        claim['torso'] |= chip
+        provenance[chip] = 0
+        print(f'{arm}: dropped {int(chip.sum())} px of pocket chips')
 
     # joint extension bands for the kept parts: they may grow ONLY into their
     # host part's territory (A4 "grow under what covers you"), taking the
@@ -486,7 +538,12 @@ def main():
             host_img = images[host]
             host_edges = cv2.Canny(cv2.cvtColor(host_img[..., :3], cv2.COLOR_RGB2GRAY), 60, 160)
             host_edges = cv2.dilate(host_edges, np.ones((5, 5), np.uint8)) > 0
-            take = ext & (host_img[..., 3] > 8) & ~host_edges
+            # only the host's REAL pixels may ride a moving part: the torso
+            # collar fill (provenance 3) covers the hood's swing and the hood
+            # lining fill (2) is synthetic — swung out by a string/eye they
+            # would show as detached wedges
+            take = (ext & (host_img[..., 3] > 8) & ~host_edges
+                    & (provenance != 3) & (provenance != 2))
             images[pid][take] = host_img[take]; provenance[take] = 1
 
     # hood: an "ear socket" of flat hood white under each ear — footprint
