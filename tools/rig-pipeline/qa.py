@@ -81,6 +81,8 @@ SEAM_KX = 368 * 0.06
 SEAM_KY = 300 * 0.04
 SEAM_FAC = {
     'hood': -0.35, 'ear-L': -0.45, 'ear-R': -0.45, 'face': 0.4,
+    # round 5: horns ride the hood's parallax (solver.ts FAC.horn)
+    'horn-L': -0.35, 'horn-R': -0.35,
     'eye-L': 1.0, 'eye-R': 1.0, 'iris-L': 1.0, 'iris-R': 1.0,
     'mouth': 1.0, 'bangs': 1.0, 'blush': 0.4, 'third-eye': 0.6,
 }

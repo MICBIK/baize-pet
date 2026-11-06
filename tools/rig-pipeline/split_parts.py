@@ -399,8 +399,17 @@ def main():
     # outside the third-eye claim and stayed in the hood as real ink; when
     # the eye drifts (~21 px relative) they showed as a broken dark outline
     # beside it (the "tear" in think). Repaint that rim as opaque shell.
+    # Integration fix: only the outline INK is repainted, and that ink moves
+    # to the third-eye part. The ring also held the hood's own soft shading
+    # under the lower lid; whitening ink and shading in the hood broke
+    # restoration (a 145 px2 block under the eye at rest).
+    te_lum = cv2.cvtColor(images['hood'][..., :3], cv2.COLOR_RGB2GRAY)
     te_rim = (dilate_mask(te_core, 4) & ~te_core & alpha & ~above_hood
-              & (images['hood'][..., 3] > 0))
+              & (images['hood'][..., 3] > 0) & (te_lum < 140))
+    # ...and the ink itself moves onto the third eye, so the rest pose keeps
+    # it and it rides with the eye instead of tearing away from it
+    images['third-eye'][..., :3][te_rim] = master[..., :3][te_rim]
+    images['third-eye'][..., 3][te_rim] = master[..., 3][te_rim]
     images['hood'][..., :3][te_rim] = shell_rgb
     images['hood'][..., 3][te_rim] = 255
     underlay(images['hood'], te_core, te_ring, shell_rgb, F=4)
