@@ -14,6 +14,8 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
+from extract_arm_slots import ARMPIT_Y as CAP_ARMPIT_Y, cap_shoulder  # noqa: E402
+
 # BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
 ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
 ART = ROOT / 'demo/rig-art'
@@ -542,6 +544,7 @@ def parts_sheet(parts):
 # --- round-4 gates -----------------------------------------------------------
 
 ARM_EDGE_ROTS = (-15, 0, 15)
+ARM_EDGE_EXTRA = {'arm-R': (-25,)}  # talk clip's swing (round 5)
 ARM_INK_LUM = 100      # outline ink: luminance below this
 ARM_INK_REACH = 4      # px: a boundary pixel within this of ink is outlined
 
@@ -551,16 +554,20 @@ def _pack_rig():
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
 
 
-def _wave_peak(rig):
-    """Most extreme arm.R.rot keyframe of the wave clip (shoulder swing)."""
+def _wave_angles(rig):
+    """Distinct non-zero arm.R.rot keyframes of the wave clip (raise, peak,
+    settle) plus whether the clip swaps to the capped 'wave' slot."""
     clip = PACK / 'rig' / 'clips' / 'wave.json'
     if not clip.exists():
-        return None
+        return [], False
     c = json.loads(clip.read_text(encoding='utf-8'))
-    keys = c.get('tracks', {}).get('arm.R.rot', [])
+    tracks = c.get('tracks', {})
+    keys = tracks.get('arm.R.rot', [])
     vals = [k.get('v', k.get('value')) if isinstance(k, dict) else k[1] for k in keys]
-    vals = [v for v in vals if isinstance(v, (int, float))]
-    return min(vals) if vals else None
+    vals = sorted({v for v in vals if isinstance(v, (int, float)) and v != 0})
+    slot_keys = tracks.get('arm.R.slot', [])
+    uses_slot = any((k[1] if isinstance(k, list) else k.get('v')) == 'wave' for k in slot_keys)
+    return vals, uses_slot
 
 
 def _runtime_arm(img, entry):
@@ -592,13 +599,20 @@ def arm_edge(parts, master):
     for name in ZORDER[ZORDER.index('hood'):]:
         if name in parts:
             above |= parts[name][..., 3] > 128
+    above_68 = np.zeros(torso.shape, bool)
+    for name in ('eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'blush', 'bangs'):
+        if name in parts:
+            above_68 |= parts[name][..., 3] > 128
     poses = []
     for arm in ('arm-L', 'arm-R'):
-        for deg in ARM_EDGE_ROTS:
+        for deg in ARM_EDGE_ROTS + ARM_EDGE_EXTRA.get(arm, ()):
             poses.append((f'{arm} {deg:+d}', arm, deg))
-    peak = _wave_peak(rig)
-    if peak is not None:
-        poses.append((f'arm-R wave {peak:+.0f}', 'arm-R', peak))
+    # Round 5: every wave keyframe angle, drawn with the slot the clip
+    # actually shows there (the capped 'wave' sleeve at the raised-arm z).
+    wave_vals, wave_slot = _wave_angles(rig)
+    wave_slot = wave_slot and 'wave' in by_id.get('arm-R', {}).get('slots', {})
+    for v in wave_vals:
+        poses.append((f'arm-R wave {v:+.0f}', 'arm-R', v))
     results = {}
     any_mirror = False
     tiles = []
@@ -607,6 +621,12 @@ def arm_edge(parts, master):
             continue
         img, mirrored = _runtime_arm(parts[arm], by_id[arm])
         any_mirror |= mirrored
+        cover = torso | above
+        if 'wave' in label and wave_slot:
+            # the clip's wave slot: same sleeve, closed shoulder cap, drawn
+            # at z 68 (only the eyes/mouth/blush/fringe stay above it)
+            img = cap_shoulder(parts[arm], CAP_ARMPIT_Y[arm])
+            cover = above_68
         m = img[..., 3] > 128
         boundary = m & ~(cv2.erode(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
         lum = cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2GRAY)
@@ -621,7 +641,7 @@ def arm_edge(parts, master):
         rot_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
         rot_bare = cv2.warpAffine(bare.astype(np.uint8) * 255, M, (w, h),
                                   flags=cv2.INTER_NEAREST, borderValue=0) > 0
-        exposed = rot_bare & ~torso & ~above
+        exposed = rot_bare & ~cover
         lines = cv2.HoughLinesP(exposed.astype(np.uint8) * 255, 1, np.pi / 180, threshold=40,
                                 minLineLength=SEAM_LINE_LEN, maxLineGap=2)
         found = [] if lines is None else [tuple(int(v) for v in l) for l in np.asarray(lines).reshape(-1, 4)]
@@ -630,7 +650,18 @@ def arm_edge(parts, master):
         rot = dict()
         comp_parts = dict(parts)
         comp_parts[arm] = rot_img
-        comp = composite(comp_parts, rot)
+        if cover is above_68:
+            # raised-arm z: sleeve over everything but the face features
+            comp_parts.pop(arm)
+            comp = composite(comp_parts, rot).astype(float)
+            for layer in [rot_img] + [parts[n] for n in ('eye-L', 'eye-R', 'iris-L', 'iris-R',
+                                                         'mouth', 'blush', 'bangs') if n in parts]:
+                a = layer[..., 3:4].astype(float) / 255.0
+                comp[..., :3] = layer[..., :3] * a + comp[..., :3] * (1 - a)
+                comp[..., 3:4] = (a + comp[..., 3:4] / 255.0 * (1 - a)) * 255.0
+            comp = comp.astype(np.uint8)
+        else:
+            comp = composite(comp_parts, rot)
         vis = comp.copy()
         vis[exposed] = (255, 0, 200, 255)
         for x1, y1, x2, y2 in found:
