@@ -114,6 +114,7 @@ describe('slot selection', () => {
   it('partClass covers all rig part families', () => {
     expect(partClass('eye-L')).toBe('eye')
     expect(partClass('third-eye.open')).toBe('thirdeye')
+    expect(partClass('horn-L')).toBe('horn')
     expect(partClass('arm-R')).toBe('arm')
     expect(partClass('fx-zzz')).toBe('fx')
   })
