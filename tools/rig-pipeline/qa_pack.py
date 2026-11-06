@@ -60,7 +60,9 @@ P3_WHITE_C = 12.0             # ...and chroma below
 P4_DIFF = 12                  # composite-brighter-than-master luminance
 P4_W_MAX = 2                  # pack px: component short side
 P4_L_MIN = 8                  # pack px: component long side
-FIELD_SIGMA = 3.0             # pack px, local material colour field blur
+REF_RADIUS = 20                # pack px: "nearby same-material" sample reach;
+                               # 12 missed the lining crease's own visible
+                               # segments (same tone, along the ring)
 TURN_COMBOS = [(tx, ty) for tx in (-1, 0, 1) for ty in (-1, 0, 1)
                if not (tx == 0 and ty == 0)]
 EAR_ANGLES = (-20, -10, 6, 12)          # P2 ear poses
@@ -205,41 +207,46 @@ class PackQA:
             res[f'{name}_box_ge4'] = int((ssizes >= CHEEK_BLOCK_MAX).sum()) if sn else 0
         return res
 
-    # --- material reference fields (P2) --------------------------------------
+    # --- material reference (P2): min dE over nearby same-material master ----
     def _lab(self, rgb_u8):
         return cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2LAB).astype(np.float32)
-
-    def _field(self, sel, sigma=FIELD_SIGMA):
-        num = cv2.GaussianBlur(self.master_rgb.astype(np.float32) * sel[..., None],
-                               (0, 0), sigma)
-        den = cv2.GaussianBlur(sel.astype(np.float32), (0, 0), sigma)
-        ok = den > 1e-3
-        out = np.zeros_like(num)
-        out[ok] = num[ok] / den[ok][..., None]
-        return out, ok
 
     def build_fields(self):
         mlab = self._lab(self.master_rgb)
         L, A, B = mlab[..., 0], mlab[..., 1], mlab[..., 2]
         opa = self.master_a > 128
-        chroma = np.sqrt(A ** 2 + B ** 2)
-        lining = (A > 110) & (B > 140) & opa
+        # cv2 8-bit LAB: a/b are OFFSET by +128, not scaled — chroma must
+        # subtract the offset (the missing -128 emptied white/hair and made
+        # "lining" match every warm pixel incl. skin)
+        chroma = np.sqrt((A - 128) ** 2 + (B - 128) ** 2)
+        lining = (A > 135) & (B > 170) & opa
         white = (L > P3_WHITE_L * 2.55) & (chroma < P3_WHITE_C) & opa
         skin = (B >= 133) & (L >= 185) & opa
+        # hair incl. its shaded strands: neutral tone, no lining amber
+        hair = (L > 170) & (chroma < 16) & opa
         tx = np.zeros_like(opa)
         x0, y0, x1, y1 = TORSO_BOX
         tx[round(y0 * SCALE):round(y1 * SCALE), round(x0 * SCALE):round(x1 * SCALE)] = True
-        cloth = white & tx
-        hair = white & self.opening
-        self.f_lining, self.f_lining_ok = self._field(lining)
-        self.f_white, self.f_white_ok = self._field(white)
-        self.f_skin, self.f_skin_ok = self._field(skin)
-        self.f_hair, self.f_hair_ok = self._field(hair)
-        self.f_cloth, self.f_cloth_ok = self._field(cloth)
+        # torso cloth incl. its grey shadows (white-only missed shaded folds
+        # and flagged the collar's own shading as non-cloth)
+        cloth = opa & tx & (L > 130) & (chroma < 25)
+        self.master_lab = self._lab(self.master_rgb)
+        self.sel_lining = lining
+        self.sel_white = white
+        self.sel_skin = skin
+        self.sel_hair = hair
+        self.sel_cloth = cloth
 
-    def _de_field(self, comp_lab, field, ok):
-        de = np.sqrt(((comp_lab - field) ** 2).sum(axis=2))
-        return np.where(ok, de, 1e6)
+    def _min_de(self, comp_lab, sel):
+        """Per-pixel dE(composite, master) minimised over the same-material
+        master pixels within REF_RADIUS — the faithful reading of the task
+        book's "dE vs nearby same-material colour". A blurred field mixed
+        the lining's light and crease tones and flagged correct content."""
+        de = np.sqrt(((comp_lab - self.master_lab) ** 2).sum(axis=2))
+        de = np.where(sel, de, 1e4).astype(np.float32)
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                      (2 * REF_RADIUS + 1, 2 * REF_RADIUS + 1))
+        return cv2.erode(de, k)
 
     # --- P2 ------------------------------------------------------------------
     def p2(self, rest):
@@ -283,7 +290,7 @@ class PackQA:
             total_viol = 0
             tiles = []
             for pose in pose_names:
-                comp, _, _ = comp_cache[pose]
+                comp, comp_alpha, _ = comp_cache[pose]
                 ui = next(i for i, p in enumerate(self.dump[pose]) if p['id'] == upper)
                 covered_pose = self.warp(pose, ui)[..., 3] >= int(COVER_A * 255)
                 exposed = covered_rest & ~covered_pose
@@ -292,23 +299,30 @@ class PackQA:
                 d_wr = self.warp(pose, li)
                 d_a = d_wr[..., 3].astype(np.float32) / 255.0
                 sil = fill_holes(d_a > 32 / 255.0)
+                # the outline's own anti-aliased ring is the OUTLINE, not a
+                # transparent hole inside it — shrink the silhouette 2 px so
+                # boundary AA is not policed as interior transparency
+                sil &= cv2.erode(sil.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) | (d_a >= COVER_A)
                 exposed &= sil
                 if not exposed.any():
                     continue
-                trans = exposed & (d_a < COVER_A)
+                # a hole = the WHOLE render is see-through to the background
+                # (a lower layer's own semi-alpha over a covering neighbour is
+                # not a hole)
+                trans = exposed & (comp_alpha < COVER_A)
                 comp_lab = self._lab(comp)
                 gray = cv2.cvtColor(comp, cv2.COLOR_RGB2GRAY)
                 ink = gray < INK_GRAY
                 if lower == 'hood':
-                    de_l = self._de_field(comp_lab, self.f_lining, self.f_lining_ok)
-                    de_w = self._de_field(comp_lab, self.f_white, self.f_white_ok)
-                    bad_color = np.where(self.opening, de_l > DE_LINING, de_w > DE_WHITE)
+                    de_l = self._min_de(comp_lab, self.sel_lining)
+                    de_w = self._min_de(comp_lab, self.sel_white)
+                    bad_color = (de_l > DE_LINING) & (de_w > DE_WHITE)
                 elif lower == 'face':
-                    de_s = self._de_field(comp_lab, self.f_skin, self.f_skin_ok)
-                    de_h = self._de_field(comp_lab, self.f_hair, self.f_hair_ok)
+                    de_s = self._min_de(comp_lab, self.sel_skin)
+                    de_h = self._min_de(comp_lab, self.sel_hair)
                     bad_color = (de_s > DE_SKIN) & (de_h > DE_SKIN)
                 else:  # torso
-                    de_c = self._de_field(comp_lab, self.f_cloth, self.f_cloth_ok)
+                    de_c = self._min_de(comp_lab, self.sel_cloth)
                     bad_color = de_c > DE_CLOTH
                 viol = exposed & (trans | (bad_color & ~ink))
                 # AA exemption: isolated <=2 px components, up to the ratio cap

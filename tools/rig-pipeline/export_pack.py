@@ -180,7 +180,7 @@ def clean_mouth_patch(patch, ox, oy, face):
     return out, ink_px
 
 
-def clean_face_part(face):
+def clean_face_part(face, occl=None):
     """Round-5 item 4/3: the face part's eye and mouth holes were inpainted
     with skin, but the inpaint left 1-2px light rings around the eye zones and
     a pale ghost of the master smile; along the cheeks it kept amber chips of
@@ -188,7 +188,13 @@ def clean_face_part(face):
     outliers inside the skin are replaced by the local median skin; amber
     chips on the face's rim lose their alpha (the hood lining under them is
     the same colour); enclosed alpha holes are inpainted. Works in place at master
-    scale; returns the number of pixels touched."""
+    scale; returns the number of pixels touched.
+
+    Round 6: the rim-chip clear (step 2) and the hole inpaint (step 3) run
+    ONLY inside `occl` — the mask of areas hidden at rest under the fringe /
+    eye / mouth patches (split_parts.py saves qa/face-occluded.png). Those
+    two steps used to touch the visible cheek edge and broke the round-6
+    principle A (visible pixels must equal the master)."""
     rgb = np.ascontiguousarray(face[..., :3])
     a = face[..., 3]
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV).astype(np.int32)
@@ -206,17 +212,35 @@ def clean_face_part(face):
     rim = (opaque > 0) & ~(cv2.erode(opaque, np.ones((17, 17), np.uint8)) > 0)
     amber = skin_hue & (sat > 140) & (val > 150)
     chips = rim & amber
-    face[..., 3][chips] = 0
-    # pinholes inside the face silhouette let the hood lining show through
-    # as amber dots beside the cheeks: close them with inpainted skin
-    solid = (face[..., 3] > 200).astype(np.uint8)
-    closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    holes = (fill_holes(closed) > 0) & (solid == 0)
-    if holes.any():
-        hm = holes.astype(np.uint8)
-        face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
-        face[..., 3][holes] = 255
-    return int(fix.sum() + chips.sum() + holes.sum())
+    n_chips = 0
+    n_holes = 0
+    if occl is None:
+        face[..., 3][chips] = 0
+        n_chips = int(chips.sum())
+        # pinholes inside the face silhouette let the hood lining show through
+        # as amber dots beside the cheeks: close them with inpainted skin
+        solid = (face[..., 3] > 200).astype(np.uint8)
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        holes = (fill_holes(closed) > 0) & (solid == 0)
+        if holes.any():
+            hm = holes.astype(np.uint8)
+            face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
+            face[..., 3][holes] = 255
+            n_holes = int(holes.sum())
+    else:
+        zone = cv2.dilate(occl, np.ones((7, 7), np.uint8)) > 0
+        chips &= zone
+        face[..., 3][chips] = 0
+        n_chips = int(chips.sum())
+        solid = (face[..., 3] > 200).astype(np.uint8)
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        holes = (fill_holes(closed) > 0) & (solid == 0) & zone
+        if holes.any():
+            hm = holes.astype(np.uint8)
+            face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
+            face[..., 3][holes] = 255
+            n_holes = int(holes.sum())
+    return int(fix.sum() + n_chips + n_holes)
 
 
 # Round 5: every part is downscaled to 0.5x on its own. Parts are exclusive
@@ -231,6 +255,9 @@ def clean_face_part(face):
 # composite is unchanged (the owner covers those pixels); the half-scale one
 # now blends each edge against the right colour.
 CONFLATION_R = 3
+# blush is translucent AND absent at rest (opacityParam 'blush' defaults 0):
+# as a guard "upper" it recoloured the hood's lining/shell to face-skin
+# pink along its claim's edge band — visible the moment the face swings
 CONFLATION_SKIP = ('blush', 'third-eye-glow')  # translucent overlays
 
 
@@ -292,10 +319,31 @@ def main():
         src = ART / 'parts-ext' / f'{pid}.png'
         if src.exists():
             guarded[pid] = np.array(Image.open(src).convert('RGBA'))
+    # Round 6: the conflation guard must not rewrite the rebuilt lining
+    # inside the hood opening. For an upper edge band it writes the master
+    # colour of the nearest ACROSS-edge pixel into every lower layer — under
+    # the fringe that far colour is face skin, and the hood's lining pixels
+    # in the band became skin. Inside the opening the rebuilt lining already
+    # IS the correct blend partner (fringe-over-lining matches the master's
+    # own edge AA), so its pre-guard RGB is restored afterwards.
+    hood_opening_mask = None
+    hood_pre_guard = None
+    opening_path = ART / 'qa' / 'hood-opening.png'
+    if 'hood' in guarded and opening_path.exists():
+        hood_opening_mask = np.array(Image.open(opening_path).convert('L')) > 127
+        hood_pre_guard = guarded['hood'][..., :3].copy()
     if 'face' in guarded:
-        # face cleanup first: its rim-chip rule would undo guard colours
-        print(f'face clean: {clean_face_part(guarded["face"])} px')
+        # face cleanup first: its rim-chip rule would undo guard colours.
+        # Round 6: steps 2/3 only inside the areas hidden at rest (the
+        # occlusion mask split_parts.py saves); missing mask = old behavior.
+        occl_path = ART / 'qa' / 'face-occluded.png'
+        occl = np.array(Image.open(occl_path).convert('L')) if occl_path.exists() else None
+        print(f'face clean: {clean_face_part(guarded["face"], occl)} px'
+              + (' (occl-restricted)' if occl is not None else ' (occl MISSING)'))
     print(f'conflation guard: {conflation_guard(guarded, master)} px recoloured')
+    if hood_opening_mask is not None:
+        guarded['hood'][..., :3][hood_opening_mask] = hood_pre_guard[hood_opening_mask]
+        print(f'hood lining restored inside opening: {int(hood_opening_mask.sum())} px')
     for pid, meta in PART_META.items():
         src = ART / 'parts-ext' / f'{pid}.png'
         if not src.exists():

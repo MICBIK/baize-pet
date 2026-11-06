@@ -150,7 +150,16 @@ def main():
     # stays excluded; this is the dark outline ink only (L<60).
     near_rim = cv2.dilate((~face_open).astype(np.uint8),
                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (51, 51))).astype(bool)
-    rim_sel = (L < 60) & face_open & near_rim & alpha
+    # round 6: the claim includes the rim ink's own anti-aliased fringe —
+    # only within 2 px of the rim core (L < 60). A wide L<110 band over the
+    # 25 px near_rim zone also swallowed dark hair strands and crease
+    # shadows well inside the opening, which every part then released and
+    # nobody claimed (zero-alpha pockets that bled background on swings).
+    rim_core = (L < 60) & face_open & near_rim & alpha
+    rim_sel = (rim_core
+               | ((L < 110) & face_open & alpha
+                  & cv2.dilate(rim_core.astype(np.uint8),
+                               np.ones((5, 5), np.uint8)).astype(bool)))
 
     # The zipper pull + tape ride the TORSO (they are jacket hardware). The
     # round-2 split cut them at the head-zone boundary y=548, so the pull's
@@ -293,15 +302,13 @@ def main():
         img[..., :3][ok] = cv2.cvtColor(out, cv2.COLOR_BGRA2RGBA)[..., :3][ok]
         img[..., 3][ok] = 255
 
-    # --- round-3 feathered underlays ------------------------------------------
-    # Every layer that moves relative to a neighbour gets a soft underlay on
-    # the layer beneath, sized to the worst-case relative drift, so a turn
-    # exposes soft fills instead of holes and hard straight edges.
-    rect_zone = np.zeros((H, W), bool)
-    for r in PATCH_RECTS.values():
-        rect_zone[r[1]:r[3], r[0]:r[2]] = True
-    rect_grow = dilate_mask(rect_zone, 8)
-    # claims of parts that render above face/hood and must never be covered
+    # --- round-6 rule-B rebuilds ---------------------------------------------
+    # Every hidden region must carry what should be there when the covering
+    # layer moves away, sampled from the master — no flat fills, no ghost
+    # copies (round-6 diagnosis 01/04).
+    #
+    # claims of parts that render above face/hood (third-eye and the outer
+    # joints excluded from above_face: their fills ride the hood/face below)
     above_face = np.zeros((H, W), bool)
     above_hood = np.zeros((H, W), bool)
     for pid in ('bangs', 'iris-L', 'iris-R', 'eye-L', 'eye-R', 'mouth',
@@ -310,84 +317,211 @@ def main():
             above_hood |= claim[pid]
             if pid != 'third-eye' and pid not in ('ear-L', 'ear-R', 'horn-L', 'horn-R'):
                 above_face |= claim[pid]
+    #
+    # R6-1 hood: rebuild the lining inside the opening. Seeds = the master's
+    # genuinely visible lining pixels (strict amber selector: skin stays
+    # out); everything else inside the opening is inpainted from them
+    # (TELEA r15) and blurred once (sigma 6, inpainted pixels only); alpha
+    # 255 throughout — no transparent holes. The rim ink stays untouched.
+    # Every pixel that is visible at rest keeps the master's own RGB
+    # (principle A): visible-at-rest = not covered by the head stack's
+    # opaque alpha — plus the master-lining pixels the leftover pass handed
+    # to the face (their face copies are cleared below instead), except
+    # under the feature patches where master amber is iris/lash content.
+    head_fill = np.zeros((H, W), bool)
+    for pid in ('face', 'bangs', 'eye-L', 'eye-R', 'iris-L', 'iris-R',
+                'mouth', 'blush', 'third-eye'):
+        if pid in claim:
+            head_fill |= claim[pid]
+    feature_claims = np.zeros((H, W), bool)
+    for pid in ('eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'third-eye'):
+        if pid in claim:
+            feature_claims |= claim[pid]
+    amber_strict = (A > 135) & (B > 170) & alpha
+    # the fill barrier is the TRUE opening boundary: the rim ink (closed to
+    # bridge hairline gaps; the fringe claims bridge the wide top gap) plus
+    # the head stack. A polygon-complement barrier overshot the true rim at
+    # the top corner by ~10 px and the rebuild's lining surfaced there as an
+    # amber bar whenever the fringe slid down (turnY).
+    rim_closed = cv2.morphologyEx(rim_core.astype(np.uint8), cv2.MORPH_CLOSE,
+                                  np.ones((21, 21), np.uint8)).astype(bool)
+    opening_full = ndimage.binary_fill_holes(head_fill | claim['hood'] | rim_closed)
+    # include the master's SEMI-alpha pixels (8..128): split_parts claims
+    # alpha>128 only, so the rim's anti-aliased fringe belonged to nobody,
+    # left a ring of zero alpha inside the opening and bled background
+    # whenever the warped silhouette sampled it
+    hood_opening = (opening_full & face_open & ~rim_sel
+                    & (master[..., 3] > 8))
+    # the polygon overshoots the true rim's top by ~10 px in places; the
+    # band between the polygon edge and the rim is SHELL continuation (the
+    # master shows shell white there) — rebuilding it as lining surfaced an
+    # amber bar with a straight bottom edge on every turnY. Exclude the band
+    # above each column's topmost rim-ink pixel.
+    rim_top = np.full(W, H + 1, np.int32)
+    ys_rim, xs_rim = np.where(rim_core)
+    if len(ys_rim):
+        np.minimum.at(rim_top, xs_rim, ys_rim)
+    poly_top = np.full(W, H + 1, np.int32)
+    ys_p, xs_p = np.where(face_open)
+    if len(ys_p):
+        np.minimum.at(poly_top, xs_p, ys_p)
+    yy_grid = np.arange(H)[:, None]
+    # only columns whose topmost rim pixel IS the top arc (near the
+    # polygon's top edge) get clipped; under the fringe the topmost rim
+    # pixel is the chin's bottom arc and clipping would erase the column
+    has_top_rim = (rim_top <= H) & (np.abs(rim_top - poly_top) < 60)
+    shell_band = (face_open & has_top_rim[None, :]
+                  & (yy_grid < rim_top[None, :] + 2))
+    hood_opening &= ~shell_band
+    Image.fromarray((hood_opening * 255).astype(np.uint8)).save(
+        ART / 'qa' / 'hood-opening.png')
+    cover_up = np.zeros((H, W), bool)
+    # blush is NOT a rest-pose renderer (opacityParam 'blush' defaults 0) —
+    # its loose SAM claim also steals the side-hair strands beside both
+    # cheeks, so counting it here would rebuild those strands as lining
+    for pid in ('face', 'bangs', 'eye-L', 'eye-R', 'iris-L', 'iris-R',
+                'mouth', 'third-eye', 'ear-L', 'ear-R', 'horn-L', 'horn-R'):
+        if pid in claim:
+            cover_up |= claim[pid] & (master[..., 3] > 128)
+    keep = hood_opening & ~cover_up
+    keep |= hood_opening & amber_strict & ~feature_claims
+    seed_sel = amber_strict & hood_opening & ~cover_up & ~feature_claims
+    need = hood_opening & ~keep
+    hood_bgr = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2BGR)
+    filled = cv2.inpaint(hood_bgr, (~seed_sel).astype(np.uint8) * 255, 15,
+                         cv2.INPAINT_TELEA)
+    filled = cv2.cvtColor(filled, cv2.COLOR_BGR2RGB).astype(np.float32)
+    filled = cv2.GaussianBlur(filled, (0, 0), 6)
+    images['hood'][..., :3][need] = filled[need].astype(np.uint8)
+    # keep pixels the hood does not own yet: copy the master (they become
+    # visible the moment the face's lining chips below are cleared)
+    own_missing = keep & (images['hood'][..., 3] < 8)
+    images['hood'][..., :3][own_missing] = master[..., :3][own_missing]
+    images['hood'][..., 3][hood_opening] = 255
+    provenance[hood_opening] = 2
+    # forbidden content check (rule: no white / skin / hair in the rebuild)
+    # hood edge skirt: 3 px of opaque hood content extending past the
+    # silhouette wherever that silhouette segment is hidden under the face
+    # stack at rest. When the head swings, the warped silhouette's bilinear
+    # interpolation band would otherwise sample zeros and bleed background
+    # through the cheek edge; with the skirt it blends hood content. The
+    # rest composite is unchanged (the skirt is hidden at rest).
+    hood_a = images['hood'][..., 3]
+    hood_solid = hood_a >= 250
+    # 24 px = the silhouette's own travel at tilt +-12 (rotation arc at the
+    # cheek radius); the warped edge's interpolation band must always land
+    # on skirt content, never on zeros. Dome side only (outside the opening
+    # polygon): the colour is the master's own pixel — the round-3 fringe
+    # root band's rule, widened — a nearest-solid extension here dragged
+    # lining amber up into the shell and drew a straight bar on turnY.
+    # Inside the polygon the rebuild already fills every pocket opaquely.
+    skirt = (cv2.dilate(hood_solid.astype(np.uint8),
+                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (49, 49))).astype(bool)
+             & ~hood_solid & cover_up & ~face_open & (master[..., 3] > 8))
+    if skirt.any():
+        images['hood'][..., :3][skirt] = master[..., :3][skirt]
+        images['hood'][..., 3][skirt] = 255
+    torso_a = images['torso'][..., 3]
+    torso_solid = torso_a >= 250
+    skirt_t = (cv2.dilate(torso_solid.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+               & ~torso_solid & (claim['hood'] & (master[..., 3] > 128)))
+    if skirt_t.any():
+        _d2, (iy2, ix2) = ndimage.distance_transform_edt(~torso_solid, return_indices=True)
+        images['torso'][..., :3][skirt_t] = images['torso'][..., :3][iy2[skirt_t], ix2[skirt_t]]
+        images['torso'][..., 3][skirt_t] = 255
+    print(f'edge skirt: hood {int(skirt.sum())} px, torso {int(skirt_t.sum())} px')
 
-    # hood: amber lining under the WHOLE face stack (face slides 0.75*kx
-    # relative to the hood — round 2 lined only part of it, and the polygon
-    # boundary showed as a hard edge). Feathered 4 px; painted only on
-    # transparent hood pixels so the rim ink stays real. The fill colour is
-    # a per-pixel blend amber<->shell-white driven by the master's own
-    # lining likelihood: a flat global median against the master's local
-    # fade produced tonal steps that read as straight lines when exposed.
-    amber_m = (A > 110) & (B > 140) & alpha
-    shell_m = close_to((249, 243, 240), alpha, tol=18)
-    w_am = cv2.GaussianBlur(amber_m.astype(float), (31, 31), 0)
-    w_sh = cv2.GaussianBlur(shell_m.astype(float), (31, 31), 0)
-    denom = np.maximum(w_am + w_sh, 1e-6)
-    lining_field = (np.clip(w_am / denom, 0, 1)[..., None]
-                    * np.array(lining_rgb, float)
-                    + (1 - np.clip(w_am / denom, 0, 1))[..., None]
-                    * np.array((249, 243, 240), float))
-    lining_core = face_open & alpha & ~claim['bangs'] & ~claim['hood']
-    lining_core |= face_open & alpha & claim['face'] & ~claim['bangs']
-    lining_core |= rect_grow & face_open & alpha & ~claim['bangs']
-    lining_core &= ~rim_sel
-    lining_ring = (dilate_mask(lining_core, 20) & face_open & alpha
-                   & ~claim['bangs'] & ~claim['hood'] & ~rim_sel & ~above_face)
-    underlay(images['hood'], lining_core, lining_ring, lining_field, F=4, tag=2)
+    # the shell band (between the polygon's top edge and the true rim) is
+    # shell continuation, not lining: carry the master's own pixels, solid
+    # where the fringe covers them at rest, so the fringe's travel exposes
+    # shell white instead of zero-alpha pockets
+    paint_band = shell_band & (master[..., 3] > 8)
+    images['hood'][..., :3][paint_band] = master[..., :3][paint_band]
+    solid_band = paint_band & cover_up
+    images['hood'][..., 3][solid_band] = 255
+    print(f'shell band: {int(paint_band.sum())} px carried, '
+          f'{int(solid_band.sum())} px solidified')
 
-    # under-fringe fill: the fringe (bangs, factor 1.0) slides 13 px over the
-    # face and 30 px over the hood; without a fill its vacated strips are
-    # transparent holes. White under the fringe area, feathered 4 px.
+    chk = cv2.cvtColor(images['hood'][..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    white_sel = (chk[..., 0] > 217) & (
+        np.sqrt((chk[..., 1] - 128) ** 2 + (chk[..., 2] - 128) ** 2) < 12)
+    skin_sel = (chk[..., 2] >= 133) & (chk[..., 0] >= 185)
+    bad_rebuild = int((need & (white_sel | skin_sel)).sum())
+    print(f'hood lining rebuild: opening {int(hood_opening.sum())} px, '
+          f'rebuilt {int(need.sum())} px, forbidden-content {bad_rebuild} px')
+
+    # fringe root band: round 3 copied fringe pixels onto the hood along the
+    # hairline so sliding fringe would not tear a gap there. Round 6 drops
+    # it: those hair pixels sit INSIDE the opening, where rule B demands
+    # lining only, and the P2 exposure gate flagged them as white streaks in
+    # the lining. The fringe's travel is covered by the face's inpainted
+    # fill (inside the opening) and the bhood shell underlay (outside it).
     bangs_a = claim['bangs'] & alpha
-    # NOTE: rings intentionally do NOT exclude the bangs claim — the fill
-    # rides the lower layer (+0.4k / -0.35k), so the claim's own vacated
-    # strips (fringe moves 1.0k) must stay covered; the underlay paint rule
-    # (transparent target pixels only) keeps real ink safe.
-    bface_core = bangs_a & face_open & ~claim['hood']
-    # The ring ignores face_open (the hood's own shell strips above the
-    # opening vacate when IT moves, and only this ring on the face covers
-    # them) but NOT the colour clip: the face renders above the hood, so a
-    # white ring over the hood's dark rim ink would be visible at rest.
-    bface_ring = (dilate_mask(bface_core, int(DRIFT_BANGS_FACE) + 6) & alpha
-                  & close_to((250, 250, 250), alpha, tol=45) & ~above_face)
-    underlay(images['face'], bface_core, bface_ring, (250, 250, 250), F=4)
     bhood_core = bangs_a & ~face_open
-    bhood_ring = (dilate_mask(bhood_core, int(DRIFT_BANGS_HOOD) + 6) & ~face_open & alpha
-                  & ~above_hood)
+    bhood_ring = (dilate_mask(bhood_core, int(DRIFT_BANGS_HOOD) + 6)
+                  & ~face_open & alpha & ~above_hood)
     underlay(images['hood'], bhood_core, bhood_ring, (250, 250, 250), F=4)
-    # fringe root band: the hood carries a copy of the fringe's own pixels
-    # along its top edge (the fringe pixels within 14 px of the shell side).
-    # At rest it hides under the identical bangs pixels; when the fringe
-    # slides with its parallax (up to 0.75*kx over the hood) the hair ROOTS
-    # stay tucked under the rim instead of tearing a gap along the hairline.
-    root_band = bangs_a & dilate_mask(~face_open, 14) & alpha
-    root_band &= ~bhood_core  # shell-side pixels are already the hood's own
-    images['hood'][..., :3][root_band] = master[..., :3][root_band]
-    images['hood'][..., 3][root_band] = 255
-    provenance[root_band] = 1
 
-    # face: flat skin under the eye/mouth slot patches (patches slide 0.6*kx
-    # over the face) — existing slot flat plus the patch rectangles grown
-    # 8 px, ring only over skin-like master pixels, feathered 4 px.
-    flat(images['face'], slot_zone & face_open & ~claim['face'], skin_rgb, tag=2)
-    # Round 4: clip to the face's skin silhouette (+ 6 px). The patch
-    # rectangles reach past the cheek outline into the
-    # hair/lining strip; skin painted there hid under the fringe at rest but
-    # showed as skin-coloured bars beside both cheeks whenever idle parallax
-    # slid the fringe.
-    # (blush stays out: its claim is loose and reaches into the side hair)
+    # R6-1 face: fills under the fringe / eye / mouth patches. The round-3
+    # flat fills (skin_rgb, 250-white) failed the round-6 exposure gate
+    # (dE <= 10 vs the master's local material): vacated strips showed flat
+    # white over shaded hair strands and flat skin over eyelid shading.
+    # Rebuild: inpaint the hidden areas from the master's own skin / hair
+    # pixels, light blur on the filled pixels only. The zone is clipped to
+    # the face's own material reach (never over the rim ink or the lining)
+    # and to pixels hidden at rest (under the patches' footprints).
     face_sil = fskin.copy()  # master skin inside the hood opening
+    face_sil |= white & face_open  # the side hair inside the opening too
     for pid in ('eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth'):
         if pid in claim:
             face_sil |= claim[pid]
     # close small gaps (eye-white rims, lashes) without filling the hair
     face_sil = ndimage.binary_closing(face_sil, structure=np.ones((7, 7), bool))
     face_reach = dilate_mask(face_sil, 6)
-    skin_core = (rect_grow & face_open & alpha & ~claim['bangs'] & ~claim['hood']
-                 & face_reach)
-    skin_ring = (dilate_mask(skin_core, 10) & face_open & alpha & ~claim['bangs']
-                 & ~claim['hood'] & ~above_face & face_reach)
-    underlay(images['face'], skin_core, skin_ring, skin_rgb, F=4)
+    fill_zone = ((slot_zone | (bangs_a & face_open)) & face_reach & alpha
+                 & ~claim['hood'] & ~rim_sel)
+    face_seeds = ((skin | (white & face_open)) & alpha & ~fill_zone
+                  & ~claim['hood'] & ~rim_sel)
+    ffill = cv2.inpaint(hood_bgr, (~face_seeds).astype(np.uint8) * 255, 8,
+                        cv2.INPAINT_TELEA)
+    ffill = cv2.cvtColor(ffill, cv2.COLOR_BGR2RGB).astype(np.float32)
+    ffill = cv2.GaussianBlur(ffill, (0, 0), 3)
+    fimg = images['face']
+    fpaint = fill_zone & ((fimg[..., 3] < 8) | (provenance == 2))
+    fimg[..., :3][fpaint] = ffill[fpaint].astype(np.uint8)
+    fimg[..., 3][fpaint] = 255
+    provenance[fpaint] = 2
+    # face coverage repair: pixels of face material (skin / white hair)
+    # inside the opening that no rest-pose renderer owns — the blush SAM
+    # claim steals the side-hair strands beside both cheeks and renders
+    # nothing there (opacityParam 0 at rest), so the face carries the
+    # master's own pixels for them (principle A: exact copy, no repaint).
+    cover_rest = np.zeros((H, W), bool)
+    for pid in ('bangs', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth'):
+        if pid in claim:
+            cover_rest |= claim[pid] & (master[..., 3] > 128)
+    repair = (face_reach & (skin | (white & face_open)) & alpha
+              & ~cover_rest & ~claim['hood'] & ~rim_sel
+              & (fimg[..., 3] < 8))
+    fimg[..., :3][repair] = master[..., :3][repair]
+    fimg[..., 3][repair] = np.maximum(master[..., 3][repair], 200)
+    provenance[repair] = 1
+    # face: master-lining pixels never belong to the face (rule B) — clear
+    # them so the hood's lining (master RGB kept above) shows instead. This
+    # is what removes the lining chips that rode the face on every slide.
+    chip = claim['face'] & amber_strict & face_open & ~feature_claims
+    images['face'][..., 3][chip] = 0
+    claim['face'] &= ~chip
+    print(f'face fill: {int(fpaint.sum())} px inpainted, '
+          f'{int(chip.sum())} px lining chips cleared, '
+          f'{int(repair.sum())} px coverage repair')
+    # occlusion mask for export_pack.clean_face_part (steps 2/3 restricted
+    # to areas hidden at rest under bangs / eyes / mouth)
+    occl = np.zeros((H, W), np.uint8)
+    for pid in ('bangs', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth'):
+        if pid in claim:
+            occl[claim[pid]] = 255
+    Image.fromarray(occl).save(ART / 'qa' / 'face-occluded.png')
 
     # hood: white socket under the third-eye (factor 0.6 slides ~21 px over
     # the hood) — round 2 left it empty, so the open patch exposed holes.
