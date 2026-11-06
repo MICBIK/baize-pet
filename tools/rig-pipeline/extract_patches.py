@@ -30,11 +30,24 @@ EYE_BOXES = {
 MOUTH_BOX = (400, 440, 458, 470)
 MARGIN = 12
 FEATHER = 3
+# Round-4 shred fallback (task: a content mask that is split (> 1 opaque
+# component), covers < 60 % of the master eye/mouth zone, or has holes
+# inside it regresses to the round-2 full-rectangle-minus-lining mask).
+MIN_BLOB = 20
+SHRED_MIN_COVERAGE = 0.6
+EDGE_FEATHER = 8
+ZONE_PAD = 10  # px around the master stroke zone the fallback may cover
+ZONE_PAD_MOUTH = 3  # the mouth box already spans the open mouth; below it is chin
 # Faces whose proportions drift too far from the master for an affine head
 # registration (mouth-puff renders the mouth ~20px above the box): the patch
 # would paste the wrong region, so the slot stays absent and the solver's
 # fallback answers it (F4).
 SKIP = {'mouth-puff'}
+# Round 4: eye-smile's head registration drags a band of hood lining and
+# hair tips across the cheek and loses the arc itself (qa/patches-check.png)
+# under both mask styles. The happy-eye arc is the closed-eye arc flipped
+# vertically (lid line "u" -> "n"), so derive it from the clean closed patch.
+DERIVE_FLIPPED = {'eye-smile': 'eye-closed'}
 
 
 def load_rgba(p):
@@ -161,7 +174,67 @@ def content_mask(patch, master_crop, zone, feather, ring_px=6):
     return np.clip(soft * alpha, 0, 255).astype(np.uint8)
 
 
-def cut_patch(img, box, margin, feather, lining=None, master=None, zone=None):
+def shred_stats(alpha, zone_rect):
+    """Round-4 shred check for a content mask: opaque (alpha > 128)
+    components of >= MIN_BLOB px, opaque coverage of the master eye/mouth
+    zone, and enclosed transparent holes (>= MIN_BLOB px) inside the zone —
+    a hole shows the flat skin underlay through the new eye white."""
+    zx0, zy0, zx1, zy1 = zone_rect
+    solid = alpha > 128
+    n, _, st, _ = cv2.connectedComponentsWithStats(solid.astype(np.uint8), connectivity=8)
+    comps = int((st[1:, cv2.CC_STAT_AREA] >= MIN_BLOB).sum())
+    zone = np.zeros_like(solid)
+    zone[zy0:zy1, zx0:zx1] = True
+    coverage = float((solid & zone).sum()) / max(1, int(zone.sum()))
+    # holes: transparent components inside the zone not touching its border
+    hole_src = (~solid & zone).astype(np.uint8)
+    hn, hl, hst, _ = cv2.connectedComponentsWithStats(hole_src, connectivity=4)
+    holes = 0
+    for i in range(1, hn):
+        x, y, w, h, area = hst[i]
+        if area < MIN_BLOB:
+            continue
+        if x <= zx0 or y <= zy0 or x + w >= zx1 or y + h >= zy1:
+            continue
+        holes += 1
+    return comps, coverage, holes
+
+
+def is_shredded(stats):
+    comps, coverage, holes = stats
+    return comps > 1 or coverage < SHRED_MIN_COVERAGE or holes > 0
+
+
+def zone_rect(zone, shape):
+    """Content-mask zone (stroke bbox + 4 px pad) in patch coordinates."""
+    h, w = shape[:2]
+    _, _, x0s, y0s, x1s, y1s = zone
+    return (max(0, x0s - 4), max(0, y0s - 4), min(w, x1s + 5), min(h, y1s + 5))
+
+
+def round2_mask(patch, lining_crop, rect=None, edge=EDGE_FEATHER):
+    """Round-2 fallback: the eye/mouth zone minus the hood lining, feathered.
+    Round 4 bounds it by `rect` (the master stroke zone + ZONE_PAD; the full
+    patch rectangle when None) and ramps alpha to zero over `edge` px inside
+    that bound: no straight seam where the patch meets the face, and the
+    margin band (cheek lining, hair tips a misregistered expression drags
+    along, e.g. eye-smile) stays out."""
+    h, w = patch.shape[:2]
+    alpha = patch[..., 3].astype(float)
+    if lining_crop is not None:
+        alpha[lining_crop] = 0
+    k = 2 * FEATHER + 1
+    soft = cv2.GaussianBlur(alpha, (k, k), 0)
+    alpha = alpha * 0.4 + soft * 0.6
+    x0, y0, x1, y1 = rect if rect is not None else (0, 0, w, h)
+    yy, xx = np.mgrid[0:h, 0:w]
+    dist = np.minimum.reduce([xx - x0, yy - y0, x1 - 1 - xx, y1 - 1 - yy]).astype(float)
+    ramp = np.clip(dist / edge, 0, 1)
+    return np.clip(alpha * ramp, 0, 255).astype(np.uint8)
+
+
+def cut_patch(img, box, margin, feather, lining=None, master=None, zone=None, log=None):
+    is_mouth = box == MOUTH_BOX
     x0, y0, x1, y1 = box
     H, W = img.shape[:2]
     a = max(0, x0 - margin)
@@ -169,22 +242,34 @@ def cut_patch(img, box, margin, feather, lining=None, master=None, zone=None):
     c = max(0, y0 - margin)
     d = min(H, y1 + margin)
     patch = img[c:d, a:b].copy()
-    if lining is not None:
+    lining_crop = lining[c:d, a:b] if lining is not None else None
+    if lining_crop is not None:
         # rework P0-3: never carry hood-lining amber — the patch mask is
         # subtracted by the lining zone in this region, feathered after
-        patch[..., 3][lining[c:d, a:b]] = 0
+        patch[..., 3][lining_crop] = 0
+    mode = 'round2'
+    stats = None
     if zone is not None and master is not None:
         master_crop = master[c:d, a:b]
         m = content_mask(patch, master_crop, zone, feather)
         if m is not None:
-            patch[..., 3] = m
+            stats = shred_stats(m, zone_rect(zone, patch.shape))
+            if not is_shredded(stats):
+                patch[..., 3] = m
+                mode = 'content'
         else:
-            print('    change area degenerate, feathered rectangle kept')
-    else:
-        alpha = patch[..., 3].astype(float)
-        k = 2 * feather + 1
-        soft = cv2.GaussianBlur(alpha, (k, k), 0)
-        patch[..., 3] = np.clip(alpha * 0.4 + soft * 0.6, 0, 255).astype(np.uint8)
+            print('    change area degenerate')
+    if mode == 'round2':
+        rect = None
+        if zone is not None:
+            zx0, zy0, zx1, zy1 = zone_rect(zone, patch.shape)
+            ph, pw = patch.shape[:2]
+            pad = ZONE_PAD_MOUTH if is_mouth else ZONE_PAD
+            rect = (max(0, zx0 - pad), max(0, zy0 - pad),
+                    min(pw, zx1 + pad), min(ph, zy1 + pad))
+        patch[..., 3] = round2_mask(patch, lining_crop, rect)
+    if log is not None:
+        log.update({'mask': mode, 'contentStats': list(stats) if stats else None})
     return patch, int(a), int(c)
 
 
@@ -229,22 +314,47 @@ def main():
         if name.startswith('eye-'):
             for side, box in EYE_BOXES.items():
                 zone = zones[f'eye-{side}']
+                log = {}
                 patch, ox, oy = cut_patch(aligned, box, MARGIN, FEATHER, lining,
-                                          master=master, zone=zone)
+                                          master=master, zone=zone, log=log)
                 out = OUT / f'{name}-{side}.png'
                 cv2.imwrite(str(out), patch)
-                entry[side] = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}
+                entry[side] = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy], **log}
         elif name.startswith('mouth-'):
+            log = {}
             patch, ox, oy = cut_patch(aligned, MOUTH_BOX, MARGIN, FEATHER, lining,
-                                      master=master, zone=zones['mouth'])
+                                      master=master, zone=zones['mouth'], log=log)
             out = OUT / f'{name}.png'
             cv2.imwrite(str(out), patch)
-            entry = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy]}
+            entry = {'image': str(out.relative_to(ROOT)), 'offset': [ox, oy], **log}
         else:
             continue
         report[name] = entry
-        print(f'{name}: patch ok')
+        print(f'{name}: patch ok ' + ' '.join(
+            f"{k}={v.get('mask')}" for k, v in entry.items() if isinstance(v, dict))
+            + (f" mask={entry.get('mask')}" if 'mask' in entry else ''))
 
+    for name, src in DERIVE_FLIPPED.items():
+        if src not in report:
+            continue
+        entry = {}
+        for side in ('L', 'R'):
+            img = cv2.imread(str(OUT / f'{src}-{side}.png'), cv2.IMREAD_UNCHANGED)
+            out = OUT / f'{name}-{side}.png'
+            cv2.imwrite(str(out), img[::-1].copy())
+            entry[side] = {'image': str(out.relative_to(ROOT)),
+                           'offset': report[src][side]['offset'],
+                           'mask': f'derived:{src}:flip-v'}
+        report[name] = entry
+        print(f'{name}: derived from {src} (vertical flip)')
+
+    # keep entries this script does not produce (gen_mouths small/mid/o,
+    # extract_third_eye half/open) so a re-run never drops other slots
+    report_path = OUT / 'patches-report.json'
+    if report_path.exists():
+        old = json.loads(report_path.read_text(encoding='utf-8'))
+        for k, v in old.items():
+            report.setdefault(k, v)
     (OUT / 'patches-report.json').write_text(
         json.dumps(report, indent=1) + '\n', encoding='utf-8'
     )

@@ -240,9 +240,14 @@ def main():
                     (max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))),
                     Image.LANCZOS,
                 )
-                arr = np.array(half)
-                clean_edge_halo(arr)
-                half = Image.fromarray(arr)
+                if part_id == 'third-eye':
+                    # the halo pass suits silhouette-edge parts only; eye and
+                    # mouth patches sit inside the face with a feathered
+                    # alpha that IS bright and < 200 everywhere near their
+                    # edge — the pass shredded them (round-4 eye-lookup-R)
+                    arr = np.array(half)
+                    clean_edge_halo(arr)
+                    half = Image.fromarray(arr)
                 out_name = f'{name}-{side}.png' if side else f'{name}.png'
                 rel = f'parts/{out_name}'
                 half.save(PACK / 'rig' / rel, optimize=True)
