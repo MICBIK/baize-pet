@@ -77,6 +77,15 @@ TORSO = [  # hoodie body between the sleeve seams, collar to hem
     (300, 505), (570, 505), (588, 560), (588, 700), (570, 762), (300, 762),
     (283, 700), (283, 560),
 ]
+# Body side line under the viewer-left sleeve: the side-seam ink of the
+# arms-behind variant (median dark pixel per row, master px), shoulder to
+# hem. The torso back-fill stops here (round 5). The viewer-right sleeve
+# needs no cut: its variant seam runs along the sleeve's own inner seam, so
+# a cut there opened a background slit whenever the arm swung out (talk).
+BODY_SIDE = {
+    'L': [(334, 548), (331, 570), (326, 590), (322, 610), (316, 630), (307, 655),
+          (302, 675), (297, 690), (296, 710), (294, 730), (294, 770)],
+}
 HEAD_ZONE_Y = 548      # everything above belongs to head parts
 COLLAR_BAND = (283, 462, 588, 580)   # torso collar fill zone (hood swing + feather)
 # Slot patch rectangles (extract_patches boxes + 12 px margin, master px).
@@ -422,6 +431,20 @@ def main():
             behind = cv2.resize(behind, (W, H), interpolation=cv2.INTER_LANCZOS4)
         occ = (claim['arm-L'] | claim['arm-R']) & torso_zone
         fill = occ & (behind[..., 3] > 24) & ~claim['torso']
+        # Round 5: the variant draws its own arms behind the back, so the
+        # copied block reached past the body's side line into the variant's
+        # sleeve. An inward arm-L swing (walk -10, any -15) exposed that
+        # outline-less white wedge beside the shoulder. Keep only the body
+        # side of the variant's side-seam ink (BODY_SIDE, read per row from
+        # the variant), so a swinging arm uncovers background there instead.
+        ys_i, xs_i = np.mgrid[0:H, 0:W]
+        for side, pts in BODY_SIDE.items():
+            py = np.array([p[1] for p in pts], float)
+            px = np.array([p[0] for p in pts], float)
+            line_x = np.interp(ys_i[:, 0], py, px)[:, None]
+            outward = (xs_i < line_x - 3) if side == 'L' else (xs_i > line_x + 3)
+            outward &= (ys_i >= py[0]) & claim[f'arm-{side}']
+            fill &= ~outward
         images['torso'][fill] = behind[fill]; provenance[fill] = 4
         print(f'torso occlusion back-fill: {int(fill.sum())} px')
         string_fill = (claim['string-L'] | claim['string-R']) & torso_zone & ~claim['torso']
