@@ -8,6 +8,7 @@ Writes numbers to stdout and qa/qa-report.txt; QA images to demo/rig-art/qa/.
 from pathlib import Path
 
 import os
+import json
 import cv2
 import numpy as np
 from PIL import Image
@@ -18,6 +19,7 @@ ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/
 ART = ROOT / 'demo/rig-art'
 QA = ART / 'qa'
 QA.mkdir(parents=True, exist_ok=True)
+PACK = ROOT / 'characters/baize-b3'  # exported pack: pivots, slots, clips
 PARTS = ART / 'parts-ext' if (ART / 'parts-ext').exists() else ART / 'parts-full'
 
 # Draw order (z, id) matching export PART_META.
@@ -537,6 +539,191 @@ def parts_sheet(parts):
     return [n for n in names]
 
 
+# --- round-4 gates -----------------------------------------------------------
+
+ARM_EDGE_ROTS = (-15, 0, 15)
+ARM_INK_LUM = 100      # outline ink: luminance below this
+ARM_INK_REACH = 4      # px: a boundary pixel within this of ink is outlined
+
+
+def _pack_rig():
+    path = PACK / 'rig' / 'rig.json'
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
+
+
+def _wave_peak(rig):
+    """Most extreme arm.R.rot keyframe of the wave clip (shoulder swing)."""
+    clip = PACK / 'rig' / 'clips' / 'wave.json'
+    if not clip.exists():
+        return None
+    c = json.loads(clip.read_text(encoding='utf-8'))
+    keys = c.get('tracks', {}).get('arm.R.rot', [])
+    vals = [k.get('v', k.get('value')) if isinstance(k, dict) else k[1] for k in keys]
+    vals = [v for v in vals if isinstance(v, (int, float))]
+    return min(vals) if vals else None
+
+
+def _runtime_arm(img, entry):
+    """Arm image as the runtime draws it at rest: viewer-left arms are
+    mirrored only when they borrow an arm-R image (solver.ts rule)."""
+    image = (entry.get('slots', {}).get('down') or {}).get('image', entry.get('image', ''))
+    mirrored = entry['id'].endswith('-L') and image.rsplit('/', 1)[-1].startswith('arm-R')
+    if not mirrored:
+        return img, False
+    ys, xs = np.where(img[..., 3] > 8)
+    x0, x1 = xs.min(), xs.max()
+    out = np.zeros_like(img)
+    out[:, x0:x1 + 1] = img[:, x0:x1 + 1][:, ::-1]
+    return out, True
+
+
+def arm_edge(parts, master):
+    """Round-4 gate: rotate each arm to -15/0/+15 deg (and arm-R to the
+    wave clip's peak) about its rig.json pivot, keep the arm's silhouette
+    pixels that carry no outline ink within ARM_INK_REACH px, and count the
+    straight runs (seam-lines Hough settings, any angle) among those pixels
+    that are visible outside the torso silhouette. Gate: 0 per pose."""
+    rig = _pack_rig()
+    if rig is None:
+        return {}, False
+    by_id = {e['id']: e for e in rig['parts']}
+    torso = parts['torso'][..., 3] > 128
+    above = np.zeros(torso.shape, bool)
+    for name in ZORDER[ZORDER.index('hood'):]:
+        if name in parts:
+            above |= parts[name][..., 3] > 128
+    poses = []
+    for arm in ('arm-L', 'arm-R'):
+        for deg in ARM_EDGE_ROTS:
+            poses.append((f'{arm} {deg:+d}', arm, deg))
+    peak = _wave_peak(rig)
+    if peak is not None:
+        poses.append((f'arm-R wave {peak:+.0f}', 'arm-R', peak))
+    results = {}
+    any_mirror = False
+    tiles = []
+    for label, arm, deg in poses:
+        if arm not in parts or arm not in by_id:
+            continue
+        img, mirrored = _runtime_arm(parts[arm], by_id[arm])
+        any_mirror |= mirrored
+        m = img[..., 3] > 128
+        boundary = m & ~(cv2.erode(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
+        lum = cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2GRAY)
+        ink = (lum < ARM_INK_LUM) & m
+        reach = 2 * ARM_INK_REACH + 1
+        lined = cv2.dilate(ink.astype(np.uint8), np.ones((reach, reach), np.uint8)) > 0
+        bare = boundary & ~lined
+        px, py = by_id[arm]['pivot']
+        h, w = m.shape
+        # canvas rotate(+deg) is clockwise on screen; cv2 positive is CCW
+        M = cv2.getRotationMatrix2D((float(px), float(py)), -float(deg), 1.0)
+        rot_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+        rot_bare = cv2.warpAffine(bare.astype(np.uint8) * 255, M, (w, h),
+                                  flags=cv2.INTER_NEAREST, borderValue=0) > 0
+        exposed = rot_bare & ~torso & ~above
+        lines = cv2.HoughLinesP(exposed.astype(np.uint8) * 255, 1, np.pi / 180, threshold=40,
+                                minLineLength=SEAM_LINE_LEN, maxLineGap=2)
+        found = [] if lines is None else [tuple(int(v) for v in l) for l in np.asarray(lines).reshape(-1, 4)]
+        results[label] = (len(found), int(exposed.sum()))
+        # tile: pose composite (torso + arm + layers above at rest)
+        rot = dict()
+        comp_parts = dict(parts)
+        comp_parts[arm] = rot_img
+        comp = composite(comp_parts, rot)
+        vis = comp.copy()
+        vis[exposed] = (255, 0, 200, 255)
+        for x1, y1, x2, y2 in found:
+            cv2.line(vis, (x1, y1), (x2, y2), (255, 0, 0, 255), 3)
+        # tile centred on the rotated arm (300 x 460 master px)
+        ys, xs = np.where(rot_img[..., 3] > 8)
+        cx = int((xs.min() + xs.max()) / 2)
+        cy = int((ys.min() + ys.max()) / 2)
+        cx0 = int(np.clip(cx - 150, 0, w - 300))
+        cy0 = int(np.clip(cy - 230, 0, h - 460))
+        crop = vis[cy0:cy0 + 460, cx0:cx0 + 300]
+        bg = np.full(crop.shape[:3], 0, np.uint8)
+        bg[..., :3] = (200, 205, 215)
+        bg[..., 3] = 255
+        a = crop[..., 3:4].astype(float) / 255
+        bg[..., :3] = (crop[..., :3] * a + bg[..., :3] * (1 - a)).astype(np.uint8)
+        tile = Image.fromarray(bg).convert('RGB')
+        tiles.append((label, tile, len(found)))
+    if tiles:
+        tw, th = tiles[0][1].size
+        cols = 4
+        rows = (len(tiles) + cols - 1) // cols
+        sheet = Image.new('RGB', (cols * tw, rows * (th + 22)), (255, 255, 255))
+        from PIL import ImageDraw
+        d = ImageDraw.Draw(sheet)
+        for i, (label, tile, n) in enumerate(tiles):
+            x, y = (i % cols) * tw, (i // cols) * (th + 22)
+            sheet.paste(tile, (x, y + 22))
+            d.text((x + 6, y + 4), f'{label}: {n} bare straight edge(s)', fill=(0, 0, 0))
+        sheet.save(QA / 'arm-edge.png')
+    return results, any_mirror
+
+
+PATCH_SLOT_PARTS = ('eye-L', 'eye-R', 'mouth')
+
+
+def patches_check(master):
+    """Round-4 deliverable: every shipped eye/mouth slot patch pasted alone
+    onto the master at its rig.json offset (export scale -> master scale),
+    one tile per slot, plus shred stats on the shipped alpha: opaque
+    components >= 20 px and enclosed transparent holes >= 20 px."""
+    rig = _pack_rig()
+    if rig is None:
+        return {}
+    k = 1.0 / rig['master'].get('scale', 0.5)
+    tiles = []
+    stats = {}
+    for entry in rig['parts']:
+        if entry['id'] not in PATCH_SLOT_PARTS:
+            continue
+        for slot, si in sorted(entry.get('slots', {}).items()):
+            path = PACK / 'rig' / si['image']
+            if not path.exists():
+                continue
+            im = Image.open(path).convert('RGBA')
+            im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+            pa = np.array(im)
+            base = master.copy()
+            x, y = int(si['x']), int(si['y'])
+            h, w = pa.shape[:2]
+            region = base[y:y + h, x:x + w]
+            a = pa[: region.shape[0], : region.shape[1], 3:4].astype(float) / 255
+            region[..., :3] = (pa[: region.shape[0], : region.shape[1], :3] * a
+                               + region[..., :3] * (1 - a)).astype(np.uint8)
+            solid = pa[..., 3] > 128
+            n, _, st, _ = cv2.connectedComponentsWithStats(solid.astype(np.uint8), connectivity=8)
+            comps = int((st[1:, cv2.CC_STAT_AREA] >= 20).sum())
+            filled = ndimage.binary_fill_holes(solid)
+            hl, hn = ndimage.label(filled & ~solid)
+            holes = int(sum(1 for i in range(1, hn + 1) if (hl == i).sum() >= 20))
+            key = f"{entry['id']}:{slot}"
+            stats[key] = (comps, holes)
+            cx, cy = x + w // 2, y + h // 2
+            crop = base[max(0, cy - 90):cy + 90, max(0, cx - 110):cx + 110]
+            bg = np.full(crop.shape, 255, np.uint8)
+            al = crop[..., 3:4].astype(float) / 255
+            bg[..., :3] = (crop[..., :3] * al + 242 * (1 - al)).astype(np.uint8)
+            tiles.append((key, Image.fromarray(bg).convert('RGB'), comps, holes))
+    if tiles:
+        from PIL import ImageDraw
+        tw, th = 220 * 2, 180 * 2
+        cols = 5
+        rows = (len(tiles) + cols - 1) // cols
+        sheet = Image.new('RGB', (cols * tw, rows * (th + 24)), (255, 255, 255))
+        d = ImageDraw.Draw(sheet)
+        for i, (key, tile, comps, holes) in enumerate(tiles):
+            x, y = (i % cols) * tw, (i // cols) * (th + 24)
+            sheet.paste(tile.resize((tw, th), Image.LANCZOS), (x, y + 24))
+            d.text((x + 6, y + 6), f'{key}  comps={comps} holes={holes}', fill=(0, 0, 0))
+        sheet.save(QA / 'patches-check.png')
+    return stats
+
+
 def main():
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     parts = load_parts()
@@ -584,6 +771,24 @@ def main():
 
     parts_sheet(parts)
     lines.append('parts sheet: qa/parts-sheet.png')
+
+    arms, arm_mirror = arm_edge(parts, master)
+    if arms:
+        lines.append('arm-edge: ' + ', '.join(f'{k}={v[0]}' for k, v in arms.items())
+                     + ' (gate 0 per pose); bare exposed px: '
+                     + ', '.join(f'{k}={v[1]}' for k, v in arms.items())
+                     + f'; arm-L mirrored at runtime: {arm_mirror}')
+        lines.append('arm-edge sheet: qa/arm-edge.png — visual gate')
+    else:
+        lines.append('arm-edge: skipped (no exported pack rig.json)')
+
+    pchk = patches_check(master)
+    if pchk:
+        shred = {k: v for k, v in pchk.items() if v[0] > 1 or v[1] > 0}
+        lines.append(f'patches-check: {len(pchk)} eye/mouth slots, {len(shred)} split or holed'
+                     + (': ' + ', '.join(f'{k}(comps={v[0]},holes={v[1]})' for k, v in shred.items())
+                        if shred else '')
+                     + ' — qa/patches-check.png, visual gate')
 
 
     holes = stress(parts, master)
