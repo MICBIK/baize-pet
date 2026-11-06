@@ -393,13 +393,24 @@ clips.wave = {
     // carried a dark sleeve plus hood fragments. Fallback per rework P0-2:
     // the down arm swings about the shoulder pivot (now a real shoulder
     // pivot in rig.json) — raise, wave twice, settle.
+    // Round 5: while raised the sleeve uses the capped 'wave' slot (the
+    // down sleeve with a closed, outlined shoulder cap, extract_arm_slots);
+    // the swap happens mid-swing, where the fast rise hides it.
+    'arm.R.slot': [
+      [0, 'down'],
+      [90, 'wave'],
+      [1540, 'down'],
+    ],
+    // Round 5: with the pivot inside the sleeve top, -122..-145 laid the
+    // raised sleeve across the cheek (the wave slot renders above the face);
+    // -100..-116 keeps the hand beside the hood rim.
     'arm.R.rot': [
       [0, 0],
-      [280, -125, 'easeOutBack'],
-      [620, -145, 'easeInOutSine'],
-      [900, -122, 'easeInOutSine'],
-      [1180, -145, 'easeInOutSine'],
-      [1450, -122, 'easeInOutSine'],
+      [280, -104, 'easeOutBack'],
+      [620, -116, 'easeInOutSine'],
+      [900, -100, 'easeInOutSine'],
+      [1180, -116, 'easeInOutSine'],
+      [1450, -100, 'easeInOutSine'],
       [1600, 0, 'easeInOutSine'],
     ],
     'body.lean': [

@@ -40,6 +40,49 @@ PICKS = {
 }
 
 
+# Capped-shoulder slots built from the down sleeve (round 5).
+CAPPED = [('arm-R', 'wave')]
+# Armpit rows (split_parts.ARMPIT_Y): below them the sleeve already has its
+# own outline on both sides; above them the cap replaces the open cut.
+ARMPIT_Y = {'arm-L': 580, 'arm-R': 585}
+CAP_INK_W = 4.0  # outline width in master px (matches the sleeve's own line)
+
+
+def cap_shoulder(img: np.ndarray, armpit_y: int) -> np.ndarray:
+    """Replace the sleeve above the armpit row with a half-ellipse cap of
+    flat sleeve cloth and a closed anti-aliased outline. The ellipse spans
+    the sleeve's width at the armpit row, so the new outline meets the
+    sleeve's outer line and inner seam ink where the original art resumes."""
+    out = img.copy()
+    m = img[:, :, 3] > 128
+    ys, _ = np.where(m)
+    top = int(ys.min())
+    row = np.where(m[armpit_y])[0]
+    xl, xr = int(row.min()), int(row.max())
+    cx, a = (xl + xr) / 2.0, (xr - xl) / 2.0 + 0.5
+    b = float(armpit_y - top) + 2.0
+    h, w = m.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    # signed distance (approx, px) inside the upper half-ellipse
+    r = np.sqrt(((xx - cx) / a) ** 2 + ((yy - armpit_y) / b) ** 2)
+    inside_e = (1.0 - r) * min(a, b)
+    cap_zone = yy < armpit_y
+    lum = cv2.cvtColor(img[:, :, :3], cv2.COLOR_RGB2GRAY)
+    cloth_px = m & (lum > 200) & (yy >= armpit_y) & (yy < armpit_y + 60)
+    cloth = np.median(img[:, :, :3][cloth_px], axis=0) if cloth_px.any() else np.array([248, 246, 245])
+    ink_px = m & (lum < 80)
+    ink = np.median(img[:, :, :3][ink_px], axis=0) if ink_px.any() else np.array([52, 36, 32])
+    zone = cap_zone & (inside_e > -1.0)
+    cov = np.clip(inside_e + 0.5, 0, 1)            # silhouette coverage (AA)
+    ink_w = np.clip(CAP_INK_W + 0.5 - inside_e, 0, 1)  # 1 on the outline ring
+    rgb = cloth[None, None, :] * (1 - ink_w[..., None]) + ink[None, None, :] * ink_w[..., None]
+    out[:, :, :3][cap_zone] = 0
+    out[:, :, 3][cap_zone] = 0
+    out[:, :, :3][zone] = rgb[zone].astype(np.uint8)
+    out[:, :, 3][zone] = (cov[zone] * 255).astype(np.uint8)
+    return out
+
+
 def main() -> None:
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     face = np.array(Image.open(ART / 'parts-ext/face.png').convert('RGBA'))
@@ -74,6 +117,28 @@ def main() -> None:
         Image.fromarray(small, 'RGBA').save(OUT / fname, optimize=True)
         slots.setdefault(part_id, {})[family] = {'image': f'parts/{fname}', 'x': x0, 'y': y0}
         print(f'{family} -> {part_id}: {fname} box=({x0},{y0})-({x1},{y1})')
+
+    # Round 5: the wave swings the down sleeve to -145 deg about the shoulder.
+    # The down sleeve's top end is an open cut (raglan shoulder hidden in the
+    # torso / under the hood at rest), and that cut swung out as a straight,
+    # outline-less white edge at the wave peak. The wave slot is the same
+    # sleeve with a closed, outlined, rounded shoulder cap. It renders at the
+    # raised-arm z (68) only while the wave clip holds it, so the rest pose
+    # (down slot) is untouched.
+    for part_id, family in CAPPED:
+        src = ART / 'parts-ext' / f'{part_id}.png'
+        if not src.exists():
+            continue
+        capped = cap_shoulder(np.array(Image.open(src).convert('RGBA')), ARMPIT_Y[part_id])
+        ys, xs = np.where(capped[:, :, 3] > 8)
+        x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+        crop = Image.fromarray(capped[y0:y1, x0:x1], 'RGBA')
+        small = crop.resize((max(1, round(crop.width * SCALE)), max(1, round(crop.height * SCALE))),
+                            Image.LANCZOS)
+        fname = f'{part_id}-{family}.png'
+        small.save(OUT / fname, optimize=True)
+        slots.setdefault(part_id, {})[family] = {'image': f'parts/{fname}', 'x': x0, 'y': y0}
+        print(f'{family} -> {part_id}: {fname} (capped shoulder) box=({x0},{y0})-({x1},{y1})')
 
     (ART / 'slots.json').write_text(json.dumps(slots, indent=1) + '\n', encoding='utf-8')
     print(f'slots.json -> {ART / "slots.json"}')

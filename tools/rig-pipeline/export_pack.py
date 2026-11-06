@@ -21,6 +21,7 @@ PACK = ROOT / 'characters/baize-b3'
 B3_MANIFEST = ROOT / 'characters/b3/manifest.json'
 SPRITES_V2 = ROOT / 'demo/pet-demo/b3-sprites-v2'
 SCALE = 0.5
+ARM_PIVOT_DROP = 24  # shoulder pivot: master px below the sleeve's top row
 
 # z / parent / pivot hints per part id (master px; refined from segmentation).
 PART_META = {
@@ -181,7 +182,16 @@ def main():
         if pid in ('arm-L', 'arm-R'):
             # arms rotate about the shoulder (A4), not the bbox centre —
             # the wave fallback swings the whole arm around this point
-            entry['pivot'] = [int((x0 + x1) / 2), int(y0) + 20]
+            # Round 5: the pivot sits INSIDE the sleeve top (mid of the
+            # sleeve row 24 px below its top). The bbox-centre x used before
+            # fell outside the sleeve (in the background beside the
+            # shoulder), so every swing dragged the shoulder tip out past
+            # the hood edge (white tip at +-15 deg) and the wave lifted the
+            # open shoulder cut clear of the body.
+            solid = img[..., 3] > 128
+            top = int(np.where(solid.any(1))[0][0])
+            row = np.where(solid[top + ARM_PIVOT_DROP])[0]
+            entry['pivot'] = [int((row.min() + row.max()) / 2), top + ARM_PIVOT_DROP]
         if pid in SLOT_DEFAULTS:
             entry['slots'] = {
                 SLOT_DEFAULTS[pid]: {'image': rel, 'x': int(x0), 'y': int(y0)}
