@@ -386,6 +386,14 @@ def main():
     te_core = claim['third-eye'] & alpha
     te_ring = (dilate_mask(te_core, int(DRIFT_THIRDEYE_HOOD) + 6) & alpha
                & ~above_hood)
+    # Round-5: the almond's outermost anti-aliased outline pixels fall
+    # outside the third-eye claim and stayed in the hood as real ink; when
+    # the eye drifts (~21 px relative) they showed as a broken dark outline
+    # beside it (the "tear" in think). Repaint that rim as opaque shell.
+    te_rim = (dilate_mask(te_core, 4) & ~te_core & alpha & ~above_hood
+              & (images['hood'][..., 3] > 0))
+    images['hood'][..., :3][te_rim] = shell_rgb
+    images['hood'][..., 3][te_rim] = 255
     underlay(images['hood'], te_core, te_ring, shell_rgb, F=4)
 
     # torso: collar fill under the hood's bottom edge and its travel (turnY
@@ -557,6 +565,20 @@ def main():
         e_core = claim[e] & alpha
         e_ring = dilate_mask(e_core, 60) & alpha8 & ~above_hood
         underlay(images['hood'], e_core, e_ring, (250, 250, 250), F=3)
+
+    # Round-5: horn-base anti-alias specks. A few tiny horn-amber islands
+    # (<40 px) stay in the hood under the horn bases; the hood slides
+    # -0.35k under the static horns on turn, so they surfaced as amber
+    # dashes beside the right horn. Drop them from the hood.
+    hood_img = images['hood']
+    hlab = cv2.cvtColor(hood_img[..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    horn_amber = (hlab[..., 1] > 135) & (hlab[..., 2] > 150) & (hood_img[..., 3] > 0)
+    n_c, lbl_c, st_c, _ = cv2.connectedComponentsWithStats(horn_amber.astype(np.uint8), connectivity=8)
+    horn_zone = dilate_mask(claim['horn-L'] | claim['horn-R'], 20)
+    for i in range(1, n_c):
+        speck = lbl_c == i
+        if st_c[i, cv2.CC_STAT_AREA] < 40 and (speck & horn_zone).any():
+            hood_img[..., 3][speck] = 0
 
     # --- QA sheet + write -----------------------------------------------------
     rng = np.random.default_rng(11)

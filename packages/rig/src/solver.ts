@@ -84,6 +84,9 @@ function composeTransforms(
   // Parallax factor per class.
   const FAC: Record<string, number> = {
     hood: -0.35,
+    // horns are sewn onto the hood: they must ride its parallax, otherwise
+    // the hood slides out from under them and opens a notch at each base
+    horn: -0.35,
     ear: -0.45,
     face: 0.4,
     eye: 1.0,
@@ -137,6 +140,7 @@ function composeTransforms(
 export function partClass(id: string): string {
   if (id.startsWith('arm')) return 'arm'
   if (id.startsWith('ear')) return 'ear'
+  if (id.startsWith('horn')) return 'horn'
   if (id.startsWith('eye')) return 'eye'
   if (id.startsWith('iris')) return 'eye'
   if (id.startsWith('mouth')) return 'mouth'

@@ -46,6 +46,45 @@ AMBER_HSV = None  # measured from the master in main()
 SHELL_RGB = np.array([249, 243, 240], float)
 
 
+PATCH_PAD = 12
+# search window for the third eye (master coords, generous for variant
+# offsets; horns sit outside x 365-515)
+EYE_WIN = (365, 95, 515, 245)
+
+
+def eye_almond(img):
+    """Convex hull of the third-eye almond: the largest amber blob in the
+    window plus the dark lid strokes touching it. Returns (mask, bbox) in
+    full-image coordinates, or (None, None)."""
+    x0, y0, x1, y1 = EYE_WIN
+    win = img[y0:y1, x0:x1]
+    lab = cv2.cvtColor(win[..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    solid = win[..., 3] > 128
+    amber = (lab[..., 1] > 135) & (lab[..., 2] > 150) & solid
+    n, lbl, st, _ = cv2.connectedComponentsWithStats(amber.astype(np.uint8), connectivity=8)
+    if n < 2:
+        return None, None
+    iris = lbl == (1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])))
+    dark = (lab[..., 0] < 95) & solid
+    near = cv2.dilate(iris.astype(np.uint8), np.ones((17, 17), np.uint8)) > 0
+    n, lbl = cv2.connectedComponents(dark.astype(np.uint8), connectivity=8)
+    keep = iris.copy()
+    for i in set(np.unique(lbl[near & dark])) - {0}:
+        comp = lbl == i
+        ys, xs = np.nonzero(comp)
+        # the hood-top outline spans the whole window: never part of the eye
+        if xs.max() - xs.min() > 0.9 * (x1 - x0) or ys.min() == 0:
+            continue
+        keep |= comp
+    pts = cv2.findNonZero(keep.astype(np.uint8))
+    hull = np.zeros(keep.shape, np.uint8)
+    cv2.fillConvexPoly(hull, cv2.convexHull(pts), 1)
+    full = np.zeros(img.shape[:2], bool)
+    full[y0:y1, x0:x1] = hull > 0
+    ys, xs = np.nonzero(full)
+    return full, (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+
+
 def load_rgba(p):
     return np.array(Image.open(p).convert('RGBA'))
 
@@ -163,37 +202,49 @@ def main():
     amber = float(iris_hsv[0]) * 2
     print(f'amber reference hue = {amber:.0f} deg from RGB {iris_rgb.astype(int).tolist()}')
 
-    # the master's closed third-eye stroke bbox + 12 px: the zone the open
-    # eye's arcs may live in (round-3 content-boundary masking, same scheme
-    # as extract_patches)
-    x0, y0, x1, y1 = THIRD_BOX
-    a, b = max(0, x0 - MARGIN), x1 + MARGIN
-    c, d = max(0, y0 - MARGIN), y1 + MARGIN
-    crop = master[c:d, a:b]
-    cl = cv2.cvtColor(crop[..., :3], cv2.COLOR_RGB2LAB).astype(int)
-    strokes = (cl[..., 0] < 95) & (crop[..., 3] > 128)
-    ys, xs = np.where(strokes)
-    zone = (c, a, int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
-
-    from extract_patches import content_mask
+    # Round-5: eye-anchored extraction. The ECC head registration left the
+    # variant's eye ~20 px low and the content mask then kept the variant's
+    # own hood-top outline as a long dark "lid" line plus torn shell
+    # fragments around it (the tear next to the third eye in think). Now
+    # each eye almond (amber iris + the lid strokes touching it) is located
+    # directly in master and variant, the variant is translated so the
+    # almonds share x-centre and lower-lid line, and the patch alpha is the
+    # almond's convex hull only, so no hood outline can ride along.
+    m_hull, m_box = eye_almond(master)
+    if m_hull is None:
+        raise SystemExit('third-eye: master almond not found')
+    mx0, my0, mx1, my1 = m_box
+    pad = PATCH_PAD
+    a, c = max(0, mx0 - pad), max(0, my0 - pad)
+    b, d = min(master.shape[1], mx1 + pad + 1), min(master.shape[0], my1 + pad + 1)
 
     report_path = OUT / 'patches-report.json'
     report = json.loads(report_path.read_text(encoding='utf-8'))
     for shape, fname in (('open', 'v-third-eye-open-1.png'), ('half', 'v-third-eye-half-1.png')):
         var = load_rgba(SRC / fname)
-        _, aligned = head_register(mg, var, master[..., 3])
-        patch = aligned[c:d, a:b].copy()
+        if var.shape[:2] != master.shape[:2]:
+            var = cv2.resize(var, (master.shape[1], master.shape[0]), interpolation=cv2.INTER_LANCZOS4)
+        hull, box = eye_almond(var)
+        if hull is None:
+            raise SystemExit(f'third-eye-{shape}: variant almond not found')
+        dx = (mx0 + mx1) / 2 - (box[0] + box[2]) / 2
+        dy = my1 - box[3]
+        M = np.float32([[1, 0, dx], [0, 1, dy]])
+        hw = (master.shape[1], master.shape[0])
+        moved = cv2.warpAffine(var, M, hw, flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+        hull_m = cv2.warpAffine(hull.astype(np.uint8) * 255, M, hw, flags=cv2.INTER_NEAREST) > 0
+        grown = cv2.dilate(hull_m.astype(np.uint8), np.ones((5, 5), np.uint8))
+        alpha = cv2.GaussianBlur(grown.astype(np.float32) * 255, (2 * FEATHER + 1, 2 * FEATHER + 1), 0)
+        alpha = np.maximum(alpha, hull_m * 255.0)
+        patch = moved[c:d, a:b].copy()
         patch = recolor_to_amber(patch, amber)
-        m = content_mask(patch, crop, zone, FEATHER)
-        if m is None:
-            raise SystemExit(f'third-eye-{shape}: change area degenerate')
-        patch[..., 3] = m
+        patch[..., 3] = np.minimum(alpha[c:d, a:b], moved[c:d, a:b, 3]).astype(np.uint8)
+        print(f'third-eye-{shape}: shift ({dx:+.0f},{dy:+.0f}) px, almond {box}')
         out = OUT / f'third-eye-{shape}.png'
         # PIL save: load_rgba above is RGB-ordered; cv2.imwrite would swap
         # R and B on disk (the round-2 blue-iris bug)
         Image.fromarray(patch).save(out)
         report[f'third-eye-{shape}'] = {'image': str(out.relative_to(ROOT)), 'offset': [int(a), int(c)]}
-        print(f'third-eye-{shape}: recolored + content mask ok')
     report_path.write_text(json.dumps(report, indent=1) + '\n', encoding='utf-8')
 
 
