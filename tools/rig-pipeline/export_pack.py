@@ -12,6 +12,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from scipy import ndimage
 from PIL import Image
 
 # BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
@@ -218,6 +219,51 @@ def clean_face_part(face):
     return int(fix.sum() + chips.sum() + holes.sum())
 
 
+# Round 5: every part is downscaled to 0.5x on its own. Parts are exclusive
+# (abutting hard edges at master scale), so after resampling each boundary
+# pixel is ~50% covered by BOTH neighbours and whatever lies underneath shows
+# through: the face's white under-fringe fill at every hair tip over the
+# lining (cheek "white blobs"), background along hood/hair seams (the faint
+# white streaks in every action). The guard recolours, within CONFLATION_R
+# master px inside each visible owner's edge, the pixels of every lower layer
+# to the master colour just across that edge, and lets the layer that owns
+# the far side extend under the edge at full alpha. The master-scale rest
+# composite is unchanged (the owner covers those pixels); the half-scale one
+# now blends each edge against the right colour.
+CONFLATION_R = 3
+CONFLATION_SKIP = ('blush', 'third-eye-glow')  # translucent overlays
+
+
+def conflation_guard(imgs, master):
+    ids = sorted((p for p in imgs if p in PART_META and not p.startswith('fx-')
+                  and p not in CONFLATION_SKIP), key=lambda p: PART_META[p]['z'])
+    h, w = master.shape[:2]
+    owner = np.full((h, w), -1, np.int32)
+    for i, pid in enumerate(ids):
+        owner[imgs[pid][..., 3] > 128] = i
+    m_opaque = master[..., 3] > 128
+    touched = 0
+    for u in range(1, len(ids)):
+        own = owner == u
+        if not own.any():
+            continue
+        dist, (iy, ix) = ndimage.distance_transform_edt(own, return_indices=True)
+        ys, xs = np.where(own & (dist <= CONFLATION_R))
+        by, bx = iy[ys, xs], ix[ys, xs]
+        far = owner[by, bx]
+        ok = m_opaque[by, bx] & (far >= 0) & (far < u)
+        ys, xs, by, bx, far = ys[ok], xs[ok], by[ok], bx[ok], far[ok]
+        col = master[by, bx, :3]
+        for low in range(u):
+            img = imgs[ids[low]]
+            is_far = far == low
+            sel = (img[ys, xs, 3] > 0) | is_far
+            img[ys[sel], xs[sel], :3] = col[sel]
+            img[ys[is_far], xs[is_far], 3] = 255
+            touched += int(sel.sum())
+    return touched
+
+
 def main():
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     hood_w, ground_y, center_x = measure_anchor(master)
@@ -241,6 +287,15 @@ def main():
     }
 
     face_master = None  # cleaned face at master scale, for mouth cleanup
+    guarded = {}
+    for pid in PART_META:
+        src = ART / 'parts-ext' / f'{pid}.png'
+        if src.exists():
+            guarded[pid] = np.array(Image.open(src).convert('RGBA'))
+    if 'face' in guarded:
+        # face cleanup first: its rim-chip rule would undo guard colours
+        print(f'face clean: {clean_face_part(guarded["face"])} px')
+    print(f'conflation guard: {conflation_guard(guarded, master)} px recoloured')
     for pid, meta in PART_META.items():
         src = ART / 'parts-ext' / f'{pid}.png'
         if not src.exists():
@@ -248,10 +303,9 @@ def main():
         if not src.exists():
             print(f'skip missing part: {pid}')
             continue
-        img = np.array(Image.open(src).convert('RGBA'))
+        img = guarded[pid] if pid in guarded else np.array(Image.open(src).convert('RGBA'))
         if pid == 'face':
-            print(f'face clean: {clean_face_part(img)} px')
-            face_master = img
+            face_master = img  # cleaned before the conflation guard
         if pid == 'mouth' and face_master is not None:
             img, _ = clean_mouth_patch(img, 0, 0, face_master)
         mask = img[..., 3] > 8
