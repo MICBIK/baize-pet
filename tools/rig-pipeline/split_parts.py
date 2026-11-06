@@ -302,6 +302,31 @@ def main():
         img[..., :3][ok] = cv2.cvtColor(out, cv2.COLOR_BGRA2RGBA)[..., :3][ok]
         img[..., 3][ok] = 255
 
+    # round 6: the master's anti-aliased fringe (alpha 8..128) belongs to
+    # nobody — every claim cuts at alpha>128, so the AA ring between two
+    # parts stays unowned. When the parts move apart the ring detaches from
+    # the outline and the half-scale resample renders it as faint grey dots
+    # (round-6 seam probe, turnY). Assign each fringe pixel to its nearest
+    # claim (upper layers win ties) and carry the master's own RGBA there.
+    fringe = (master[..., 3] > 8) & ~alpha & ~acc
+    if fringe.any():
+        names = [p for p in Z_DESC if p in claim]
+        best = np.full((H, W), np.inf)
+        fringe_owner = np.zeros((H, W), np.int32)
+        for idx, pid in enumerate(names):
+            dist = cv2.distanceTransform((claim[pid] == 0).astype(np.uint8),
+                                         cv2.DIST_L2, 3) + idx * 0.9
+            closer = dist < best
+            best[closer] = dist[closer]
+            fringe_owner[closer] = idx
+        for idx, pid in enumerate(names):
+            take = fringe & (fringe_owner == idx)
+            if not take.any():
+                continue
+            claim[pid] |= take
+            images[pid][take] = master[take]
+        print(f'AA fringe assigned: {int(fringe.sum())} px')
+
     # --- round-6 rule-B rebuilds ---------------------------------------------
     # Every hidden region must carry what should be there when the covering
     # layer moves away, sampled from the master — no flat fills, no ghost
@@ -660,8 +685,11 @@ def main():
         'string-L': 'torso', 'string-R': 'torso', 'third-eye': 'hood',
         'bangs': 'face', 'eye-L': 'face', 'eye-R': 'face', 'mouth': 'face',
     }
+    # ear root band 15 px (round 6 R6-2): the ear's copied band into the
+    # hood must stay short so its straight cut edge swings only inside the
+    # hood's shell at +-20 deg and never shows as a bare edge
     EXT_RADIUS = {
-        'tail': 30, 'leg-L': 40, 'leg-R': 40, 'ear-L': 35, 'ear-R': 35,
+        'tail': 30, 'leg-L': 40, 'leg-R': 40, 'ear-L': 15, 'ear-R': 15,
         'horn-L': 8, 'horn-R': 8, 'string-L': 6, 'string-R': 6,
         'third-eye': 6, 'eye-L': 6, 'eye-R': 6, 'mouth': 6,
     }  # bangs has no joint of its own — it rides the head group
@@ -716,8 +744,16 @@ def main():
             # collar fill (provenance 3) covers the hood's swing and the hood
             # lining fill (2) is synthetic — swung out by a string/eye they
             # would show as detached wedges
-            take = (ext & (host_img[..., 3] > 8) & ~host_edges
-                    & (provenance != 3) & (provenance != 2))
+            if pid in ('ear-L', 'ear-R'):
+                # the ear's copy runs up to the hood's own ink (no edge
+                # exclusion): a cut through the shell 5 px before the ink
+                # resampled into faint grey dots at half scale (round-6
+                # seam probe); a cut ON the ink blends dark over dark
+                take = (ext & (host_img[..., 3] > 8)
+                        & (provenance != 3) & (provenance != 2))
+            else:
+                take = (ext & (host_img[..., 3] > 8) & ~host_edges
+                        & (provenance != 3) & (provenance != 2))
             images[pid][take] = host_img[take]; provenance[take] = 1
 
     # hood: an "ear socket" of flat hood white under each ear — footprint
@@ -731,6 +767,15 @@ def main():
         e_core = claim[e] & alpha
         e_ring = dilate_mask(e_core, 60) & alpha8 & ~above_hood
         underlay(images['hood'], e_core, e_ring, (250, 250, 250), F=3)
+        # R6-2: enclosed alpha holes inside the ear (the fluff's transparent
+        # gaps, round-6 diagnosis 05) get the master's own fluff pixels
+        e_img = images[e]
+        e_solid = e_img[..., 3] > 8
+        e_holes = ndimage.binary_fill_holes(e_solid) & ~e_solid & (master[..., 3] > 128)
+        e_img[..., :3][e_holes] = master[..., :3][e_holes]
+        e_img[..., 3][e_holes] = 255
+        if e_holes.any():
+            print(f'{e}: filled {int(e_holes.sum())} internal alpha holes')
 
     # Round-5: horn-base anti-alias specks. A few tiny horn-amber islands
     # (<40 px) stay in the hood under the horn bases; the hood slides
