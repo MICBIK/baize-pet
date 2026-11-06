@@ -116,6 +116,107 @@ def clean_edge_halo(img):
     return int(clear.sum())
 
 
+# Round-5 face polish. Mouth patches are cut from registered variants with a
+# rectangular feathered mask, so they drag along whatever the variant had
+# around the mouth: white line fragments from the master outline (idle
+# "white rectangle"), and the chin / hood lining of a lower-sitting head
+# (mouth-cat's grey chin smudge). The face part already carries clean skin
+# under the mouth, so a mouth image only needs its own strokes.
+MOUTH_MIN_COMPONENT = 5   # master px; smaller ink islands are noise
+MOUTH_MIN_INK = 60        # master px of pink mouth interior a slot needs;
+                          # below it the patch is chin/lining debris only
+
+
+def fill_holes(mask):
+    """Fill the enclosed holes of a binary mask (uint8 0/1)."""
+    h, w = mask.shape
+    ff = np.pad(mask.astype(np.uint8), 1)
+    seed = np.zeros((h + 4, w + 4), np.uint8)
+    cv2.floodFill(ff, seed, (0, 0), 2)
+    out = mask.astype(np.uint8).copy()
+    out[ff[1:-1, 1:-1] == 0] = 1
+    return out
+
+
+def clean_mouth_patch(patch, ox, oy, face):
+    """Keep only the mouth strokes of a master-scale mouth image placed at
+    (ox, oy). Ink = pink/red interior, dark outline or brown line pixels that
+    sit over the face part's skin; light/grey/amber pixels never count. Ink
+    islands are closed, hole-filled (keeps tongue highlights), grown 1px and
+    feathered; everything else loses its alpha. Returns (patch, pink_px):
+    the kept ink that is mouth-interior pink (chin/lining debris is amber or
+    peach, hue 8-18, and never counts)."""
+    h, w = patch.shape[:2]
+    under = np.zeros((h, w, 4), np.int32)
+    fy0, fx0 = max(oy, 0), max(ox, 0)
+    fy1, fx1 = min(oy + h, face.shape[0]), min(ox + w, face.shape[1])
+    under[fy0 - oy:fy1 - oy, fx0 - ox:fx1 - ox] = face[fy0:fy1, fx0:fx1]
+    skin = fill_holes((under[..., 3] > 200) & (under[..., :3].min(-1) > 170))
+    valid = cv2.erode(skin, np.ones((5, 5), np.uint8)) > 0
+    hsv = cv2.cvtColor(np.ascontiguousarray(patch[..., :3]), cv2.COLOR_RGB2HSV).astype(np.int32)
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    pink = ((hue >= 150) | (hue <= 8)) & (sat > 45)
+    dark = val < 120
+    # brown line strokes (the idle smile fades to a light tan mid-stroke);
+    # saturated bright amber is hood lining, not a mouth
+    diff = np.abs(patch[..., :3].astype(np.int32) - under[..., :3]).max(-1)
+    brown = (hue <= 20) & (sat >= 45) & ~((sat > 150) & (val > 215)) & (val < 250) & (diff > 20)
+    ink = (patch[..., 3] > 100) & (pink | dark | brown) & valid
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    keep = np.zeros((h, w), np.uint8)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= MOUTH_MIN_COMPONENT:
+            keep[lab == i] = 1
+    rose = ((hue >= 150) | (hue <= 3)) & (sat > 45)
+    ink_px = int((keep.astype(bool) & rose).sum())
+    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    keep = fill_holes(keep)
+    soft = cv2.dilate(keep, np.ones((3, 3), np.uint8)).astype(np.float32)
+    soft = cv2.GaussianBlur(soft, (5, 5), 1.0) * valid
+    out = patch.copy()
+    out[..., 3] = (patch[..., 3] * np.clip(soft, 0, 1)).astype(np.uint8)
+    return out, ink_px
+
+
+def clean_face_part(face):
+    """Round-5 item 4/3: the face part's eye and mouth holes were inpainted
+    with skin, but the inpaint left 1-2px light rings around the eye zones and
+    a pale ghost of the master smile; along the cheeks it kept amber chips of
+    the hood lining, and pinholes that show the lining through. Light thin
+    outliers inside the skin are replaced by the local median skin; amber
+    chips on the face's rim lose their alpha (the hood lining under them is
+    the same colour); enclosed alpha holes are inpainted. Works in place at master
+    scale; returns the number of pixels touched."""
+    rgb = np.ascontiguousarray(face[..., :3])
+    a = face[..., 3]
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV).astype(np.int32)
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    opaque = (a > 200).astype(np.uint8)
+    skin_hue = (hue >= 4) & (hue <= 22)
+    med = cv2.medianBlur(cv2.medianBlur(rgb, 7), 7)
+    mhsv = cv2.cvtColor(med, cv2.COLOR_RGB2HSV).astype(np.int32)
+    med_skin = (mhsv[..., 0] >= 4) & (mhsv[..., 0] <= 22) & (mhsv[..., 1] > 30) & (mhsv[..., 2] > 200)
+    interior = cv2.erode(opaque, np.ones((7, 7), np.uint8)) > 0
+    lighter = (rgb.astype(np.int32) - med.astype(np.int32)).max(-1) > 6
+    paler = sat < mhsv[..., 1] - 12
+    fix = interior & med_skin & (lighter | paler)
+    face[..., :3][fix] = med[fix]
+    rim = (opaque > 0) & ~(cv2.erode(opaque, np.ones((17, 17), np.uint8)) > 0)
+    amber = skin_hue & (sat > 140) & (val > 150)
+    chips = rim & amber
+    face[..., 3][chips] = 0
+    # pinholes inside the face silhouette let the hood lining show through
+    # as amber dots beside the cheeks: close them with inpainted skin
+    solid = (face[..., 3] > 200).astype(np.uint8)
+    closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    holes = (fill_holes(closed) > 0) & (solid == 0)
+    if holes.any():
+        hm = holes.astype(np.uint8)
+        face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
+        face[..., 3][holes] = 255
+    return int(fix.sum() + chips.sum() + holes.sum())
+
+
 def main():
     master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
     hood_w, ground_y, center_x = measure_anchor(master)
@@ -138,6 +239,7 @@ def main():
         'expressions': 'expressions.json',
     }
 
+    face_master = None  # cleaned face at master scale, for mouth cleanup
     for pid, meta in PART_META.items():
         src = ART / 'parts-ext' / f'{pid}.png'
         if not src.exists():
@@ -146,6 +248,11 @@ def main():
             print(f'skip missing part: {pid}')
             continue
         img = np.array(Image.open(src).convert('RGBA'))
+        if pid == 'face':
+            print(f'face clean: {clean_face_part(img)} px')
+            face_master = img
+        if pid == 'mouth' and face_master is not None:
+            img, _ = clean_mouth_patch(img, 0, 0, face_master)
         mask = img[..., 3] > 8
         box = bbox_of(mask)
         if box is None:
@@ -236,6 +343,14 @@ def main():
                 if not target:
                     continue
                 im = Image.open(src).convert('RGBA')
+                if part_id == 'mouth' and face_master is not None:
+                    cleaned, ink_px = clean_mouth_patch(np.array(im), int(ox), int(oy), face_master)
+                    if ink_px < MOUTH_MIN_INK:
+                        # nothing but chin/lining left: let the solver fall
+                        # back to the default mouth instead of a smudge (F4)
+                        print(f'drop mouth slot {shape}: {ink_px} pink px')
+                        continue
+                    im = Image.fromarray(cleaned)
                 half = im.resize(
                     (max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))),
                     Image.LANCZOS,
