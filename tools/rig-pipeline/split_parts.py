@@ -512,10 +512,22 @@ def main():
     ffill = cv2.cvtColor(ffill, cv2.COLOR_BGR2RGB).astype(np.float32)
     ffill = cv2.GaussianBlur(ffill, (0, 0), 3)
     fimg = images['face']
-    fpaint = fill_zone & ((fimg[..., 3] < 8) | (provenance == 2))
+    # R6-3: the fringe's semi-alpha strand edges blend with whatever lies
+    # beneath — an inpainted approximation there shows as a bright line at
+    # half scale. Pixels covered only PARTIALLY by the fringe keep the
+    # master's own RGBA (the blend then equals master exactly); the inpaint
+    # fill runs only where the fringe covers fully.
+    b_a = images['bangs'][..., 3]
+    full_cover = b_a >= 200
+    fpaint = (fill_zone & ((fimg[..., 3] < 8) | (provenance == 2))
+              & (full_cover | slot_zone))
     fimg[..., :3][fpaint] = ffill[fpaint].astype(np.uint8)
     fimg[..., 3][fpaint] = 255
     provenance[fpaint] = 2
+    fpaint_semi = (fill_zone & (fimg[..., 3] < 8) & ~full_cover
+                   & (b_a > 8) & ~slot_zone)
+    fimg[..., :3][fpaint_semi] = master[..., :3][fpaint_semi]
+    fimg[..., 3][fpaint_semi] = master[..., 3][fpaint_semi]
     # face coverage repair: pixels of face material (skin / white hair)
     # inside the opening that no rest-pose renderer owns — the blush SAM
     # claim steals the side-hair strands beside both cheeks and renders
