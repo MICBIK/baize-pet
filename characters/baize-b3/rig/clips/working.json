@@ -1,0 +1,48 @@
+{
+ "name": "working",
+ "duration": 1000,
+ "loop": true,
+ "layer": "action",
+ "expression": "determined",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "head.turnY": [
+   [
+    0,
+    0.25
+   ],
+   [
+    500,
+    0.3,
+    "easeInOutSine"
+   ],
+   [
+    1000,
+    0.25
+   ]
+  ],
+  "thirdEye": [
+   [
+    0,
+    0.5
+   ]
+  ],
+  "thirdEye.glow": [
+   [
+    0,
+    0.2
+   ]
+  ]
+ }
+}

@@ -1,0 +1,73 @@
+{
+ "name": "idle-happy",
+ "duration": 1600,
+ "loop": true,
+ "layer": "base",
+ "expression": "happy",
+ "tracks": {
+  "body.lean": [
+   [
+    0,
+    0
+   ],
+   [
+    400,
+    3,
+    "easeInOutSine"
+   ],
+   [
+    1200,
+    -3,
+    "easeInOutSine"
+   ],
+   [
+    1600,
+    0
+   ]
+  ],
+  "tail.rot": [
+   [
+    0,
+    0
+   ],
+   [
+    200,
+    6,
+    "easeInOutSine"
+   ],
+   [
+    600,
+    -6,
+    "easeInOutSine"
+   ],
+   [
+    800,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    400,
+    4,
+    "easeInOutSine"
+   ],
+   [
+    1200,
+    -4,
+    "easeInOutSine"
+   ],
+   [
+    1600,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   0,
+   "fx:note"
+  ]
+ ]
+}

@@ -1,0 +1,58 @@
+{
+ "cell": 256,
+ "ground": 246,
+ "states": {
+  "dance": {
+   "frames": 8,
+   "durations": [
+    170,
+    170,
+    170,
+    170,
+    170,
+    170,
+    170,
+    170
+   ],
+   "loop": true
+  },
+  "sit": {
+   "frames": 6,
+   "durations": [
+    300,
+    250,
+    250,
+    250,
+    250,
+    400
+   ],
+   "loop": false
+  },
+  "sit-idle": {
+   "frames": 6,
+   "durations": [
+    400,
+    300,
+    300,
+    400,
+    300,
+    500
+   ],
+   "loop": true
+  },
+  "hide-in-hood": {
+   "frames": 8,
+   "durations": [
+    200,
+    160,
+    160,
+    160,
+    200,
+    200,
+    700,
+    900
+   ],
+   "loop": false
+  }
+ }
+}

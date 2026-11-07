@@ -36,6 +36,8 @@ export function loadCharacter(packId: string): CharacterInfo {
   const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
     id?: unknown
     animations?: unknown
+    renderer?: unknown
+    rig?: unknown
   }
   if (typeof raw.id !== 'string' || typeof raw.animations !== 'object' || raw.animations === null) {
     throw new Error(`Invalid character manifest: ${manifestPath}`)
@@ -43,6 +45,11 @@ export function loadCharacter(packId: string): CharacterInfo {
   const animations: Partial<Record<PetActionName, string>> = {}
   for (const [action, file] of Object.entries(raw.animations as Record<string, unknown>)) {
     if (typeof file !== 'string') continue
+    if (file.startsWith('rig:') || file.startsWith('sprite:')) {
+      // Prefixed forms are resolved by the rig/sprite players, not file paths.
+      animations[action as PetActionName] = file
+      continue
+    }
     const filePath = join(packDir, file)
     assertWithinPack(packDir, filePath)
     try {
@@ -52,5 +59,11 @@ export function loadCharacter(packId: string): CharacterInfo {
       // Missing animation files are tolerated; the renderer falls back to idle.
     }
   }
-  return { id: raw.id, animations: animations as Record<PetActionName, string> }
+  const renderer = raw.renderer === 'rig' ? 'rig' : 'video'
+  return {
+    id: raw.id,
+    animations: animations as Record<PetActionName, string>,
+    renderer,
+    rig: typeof raw.rig === 'string' ? raw.rig : undefined,
+  }
 }

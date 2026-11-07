@@ -153,4 +153,124 @@ describe('loadCharacterPack', () => {
     expect(pack.manifest.scenes?.[0]?.candidates.length).toBeGreaterThanOrEqual(3)
     expect(pack.persona).toContain('白泽')
   })
+
+  it('round-trips the repository baize-b3 rig pack', () => {
+    const pack = loadCharacterPack(join(__dirname, '../../../characters/baize-b3'))
+    expect(pack.manifest.id).toBe('baize-b3')
+    expect(pack.manifest.renderer).toBe('rig')
+    expect(pack.manifest.animations.idle).toBe('rig:idle')
+    expect(pack.manifest.animations.dance).toBe('sprite:dance')
+    expect(Object.keys(pack.manifest.animations).length).toBeGreaterThanOrEqual(39)
+    expect(pack.manifest.lines?.click?.length).toBeGreaterThan(0)
+  })
+
+  it('defaults renderer to video for legacy packs', () => {
+    const dir = writePack('default-renderer', VALID_MANIFEST)
+    expect(loadCharacterPack(dir).manifest.renderer).toBe('video')
+  })
+})
+
+describe('rig packs', () => {
+  const RIG_JSON = {
+    version: 1,
+    master: { width: 690, height: 1024, scale: 0.5 },
+    anchor: { hoodWidth: 184, groundY: 1013, centerX: 345 },
+    parts: [
+      { id: 'tail', image: 'parts/tail.png', x: 1, y: 2, z: 0, parent: 'body', pivot: [3, 4] },
+      {
+        id: 'arm-R',
+        z: 40,
+        parent: 'body',
+        pivot: [5, 6],
+        slots: { down: { image: 'parts/arm-R.down.png', x: 7, y: 8 } },
+      },
+    ],
+    groups: { body: { pivot: [345, 1013] } },
+    clips: ['clips/idle.json', 'clips/wave.json'],
+  }
+
+  function writeRigPack(
+    name: string,
+    manifest: Record<string, unknown>,
+    options?: { rigJson?: Record<string, unknown>; skipParts?: boolean; skipClips?: boolean },
+  ): string {
+    const dir = writePack(name, manifest)
+    const rigDir = join(dir, 'rig')
+    mkdirSync(rigDir, { recursive: true })
+    writeFileSync(join(rigDir, 'rig.json'), JSON.stringify(options?.rigJson ?? RIG_JSON))
+    if (!options?.skipParts) {
+      mkdirSync(join(rigDir, 'parts'), { recursive: true })
+      writeFileSync(join(rigDir, 'parts', 'tail.png'), 'png')
+      writeFileSync(join(rigDir, 'parts', 'arm-R.down.png'), 'png')
+    }
+    if (!options?.skipClips) {
+      mkdirSync(join(rigDir, 'clips'), { recursive: true })
+      writeFileSync(join(rigDir, 'clips', 'idle.json'), '{}')
+      writeFileSync(join(rigDir, 'clips', 'wave.json'), '{}')
+    }
+    return dir
+  }
+
+  const RIG_MANIFEST = {
+    id: 'rig-pack',
+    name: 'Rig 测试',
+    version: '1.0.0',
+    renderer: 'rig',
+    rig: 'rig/rig.json',
+    animations: { idle: 'rig:idle', wave: 'rig:wave', dance: 'sprite:dance' },
+  }
+
+  it('loads a legal rig pack with prefixed animations', () => {
+    const dir = writeRigPack('rig-ok', RIG_MANIFEST)
+    mkdirSync(join(dir, 'sprites'), { recursive: true })
+    writeFileSync(
+      join(dir, 'sprites', 'sprites.json'),
+      JSON.stringify({ states: { dance: { frames: 8 } } }),
+    )
+    const pack = loadCharacterPack(dir)
+    expect(pack.manifest.renderer).toBe('rig')
+    expect(pack.manifest.animations.wave).toBe('rig:wave')
+  })
+
+  it('rejects renderer rig without the rig field', () => {
+    const dir = writeRigPack('rig-nofield', { ...RIG_MANIFEST, rig: undefined })
+    expect(() => loadCharacterPack(dir)).toThrow(/"rig" field/)
+  })
+
+  it('rejects a rig clip not declared in rig.json', () => {
+    const dir = writeRigPack('rig-badclip', { ...RIG_MANIFEST, animations: { idle: 'rig:nope' } })
+    expect(() => loadCharacterPack(dir)).toThrow(/not declared/)
+  })
+
+  it('rejects a sprite sheet missing from sprites.json', () => {
+    const dir = writeRigPack('rig-badsprite', RIG_MANIFEST)
+    mkdirSync(join(dir, 'sprites'), { recursive: true })
+    writeFileSync(join(dir, 'sprites', 'sprites.json'), JSON.stringify({ states: { other: {} } }))
+    expect(() => loadCharacterPack(dir)).toThrow(/not in sprites.json/)
+  })
+
+  it('rejects rig part images that are missing or escape the pack', () => {
+    const noSprite = { ...RIG_MANIFEST, animations: { idle: 'rig:idle', wave: 'rig:wave' } }
+    const dir = writeRigPack('rig-missing-part', noSprite, { skipParts: true })
+    expect(() => loadCharacterPack(dir)).toThrow(/does not exist/)
+    const escapeJson = {
+      ...RIG_JSON,
+      parts: [{ id: 'x', image: '../evil.png', z: 1, pivot: [0, 0] }],
+    }
+    const dir2 = writeRigPack('rig-escape-part', noSprite, { rigJson: escapeJson })
+    expect(() => loadCharacterPack(dir2)).toThrow(/escapes|unsafe/)
+  })
+
+  it('rejects rig: animations on video packs', () => {
+    const dir = writePack('rig-on-video', {
+      id: 'mixed',
+      name: '混合',
+      version: '1.0.0',
+      animations: { idle: 'rig:idle' },
+    })
+    mkdirSync(join(dir, 'rig', 'clips'), { recursive: true })
+    writeFileSync(join(dir, 'rig', 'rig.json'), '{}')
+    writeFileSync(join(dir, 'rig', 'clips', 'idle.json'), '{}')
+    expect(() => loadCharacterPack(dir)).toThrow(/requires renderer/)
+  })
 })

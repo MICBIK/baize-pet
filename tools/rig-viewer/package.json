@@ -1,0 +1,21 @@
+{
+  "name": "rig-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "description": "Standalone rig debug page: parameter sliders, expressions, actions, FPS meter, joint stress sweep, pivot overlay",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@baize/rig": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5"
+  }
+}

@@ -8,6 +8,7 @@
     "paths": {
       "@baize/shared": ["packages/shared/src/index.ts"],
       "@baize/core": ["packages/core/src/index.ts"],
+      "@baize/rig": ["packages/rig/src/index.ts"],
       "@baize/memory": ["packages/memory/src/index.ts"],
       "@baize/llm": ["packages/llm/src/index.ts"]
     }
@@ -17,6 +18,8 @@
     "apps/desktop/src/**/*.ts",
     "apps/desktop/src/**/*.tsx",
     "apps/desktop/electron-vite.config.ts",
+    "tools/*/src/**/*.ts",
+    "tools/*/vite.config.ts",
     "vitest.config.ts"
   ]
 }

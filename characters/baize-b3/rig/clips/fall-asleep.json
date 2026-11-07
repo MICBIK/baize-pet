@@ -1,0 +1,58 @@
+{
+ "name": "fall-asleep",
+ "duration": 2600,
+ "loop": false,
+ "layer": "action",
+ "next": "sleep",
+ "tracks": {
+  "eye.L.open": [
+   [
+    0,
+    0.5
+   ],
+   [
+    1200,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "eye.R.open": [
+   [
+    0,
+    0.5
+   ],
+   [
+    1200,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "head.turnY": [
+   [
+    0,
+    0.3,
+    "easeInOutSine"
+   ],
+   [
+    700,
+    0,
+    "easeInOutSine"
+   ],
+   [
+    1300,
+    0.5,
+    "easeInOutSine"
+   ],
+   [
+    1900,
+    0.2,
+    "easeInOutSine"
+   ],
+   [
+    2600,
+    0.55,
+    "easeInOutSine"
+   ]
+  ]
+ }
+}

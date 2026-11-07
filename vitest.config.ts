@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@baize/shared': fileURLToPath(new URL('./packages/shared/src/index.ts', import.meta.url)),
       '@baize/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@baize/rig': fileURLToPath(new URL('./packages/rig/src/index.ts', import.meta.url)),
       '@baize/memory': fileURLToPath(new URL('./packages/memory/src/index.ts', import.meta.url)),
       '@baize/llm': fileURLToPath(new URL('./packages/llm/src/index.ts', import.meta.url)),
     },

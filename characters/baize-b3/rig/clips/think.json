@@ -1,0 +1,61 @@
+{
+ "name": "think",
+ "duration": 3000,
+ "loop": true,
+ "layer": "action",
+ "expression": "thinking",
+ "tracks": {
+  "arm.R.slot": [
+   [
+    0,
+    "chin"
+   ]
+  ],
+  "head.tilt": [
+   [
+    0,
+    6,
+    "easeOutBack"
+   ]
+  ],
+  "thirdEye": [
+   [
+    0,
+    0
+   ],
+   [
+    1200,
+    1,
+    "easeInOutSine"
+   ],
+   [
+    2600,
+    0.7
+   ],
+   [
+    3000,
+    1
+   ]
+  ],
+  "thirdEye.glow": [
+   [
+    1200,
+    0
+   ],
+   [
+    1800,
+    0.6,
+    "easeInOutSine"
+   ],
+   [
+    2400,
+    0.3,
+    "easeInOutSine"
+   ],
+   [
+    3000,
+    0.6
+   ]
+  ]
+ }
+}

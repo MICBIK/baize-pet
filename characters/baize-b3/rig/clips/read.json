@@ -1,0 +1,50 @@
+{
+ "name": "read",
+ "duration": 3200,
+ "loop": true,
+ "layer": "action",
+ "expression": "determined",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "eye.lookX": [
+   [
+    0,
+    -0.5,
+    "easeInOutSine"
+   ],
+   [
+    1500,
+    0.5,
+    "easeInOutSine"
+   ],
+   [
+    3100,
+    -0.5,
+    "easeInOutSine"
+   ]
+  ],
+  "head.tilt": [
+   [
+    0,
+    6
+   ]
+  ]
+ },
+ "events": [
+  [
+   2900,
+   "fx:sparkle1"
+  ]
+ ]
+}

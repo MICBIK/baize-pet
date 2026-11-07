@@ -1,0 +1,684 @@
+{
+ "version": 1,
+ "master": {
+  "width": 854,
+  "height": 1188,
+  "scale": 0.5
+ },
+ "anchor": {
+  "hoodWidth": 524.0,
+  "groundY": 1101,
+  "centerX": 435
+ },
+ "parts": [
+  {
+   "id": "tail",
+   "image": "parts/tail.png",
+   "x": 528,
+   "y": 756,
+   "z": 0,
+   "parent": "body",
+   "pivot": [
+    613,
+    817
+   ]
+  },
+  {
+   "id": "leg-L",
+   "image": "parts/leg-L.png",
+   "x": 276,
+   "y": 798,
+   "z": 10,
+   "parent": "body",
+   "pivot": [
+    368,
+    951
+   ]
+  },
+  {
+   "id": "leg-R",
+   "image": "parts/leg-R.png",
+   "x": 444,
+   "y": 798,
+   "z": 10,
+   "parent": "body",
+   "pivot": [
+    526,
+    951
+   ]
+  },
+  {
+   "id": "shorts",
+   "image": "parts/shorts.png",
+   "x": 304,
+   "y": 754,
+   "z": 20,
+   "parent": "body",
+   "pivot": [
+    441,
+    813
+   ]
+  },
+  {
+   "id": "torso",
+   "image": "parts/torso.png",
+   "x": 282,
+   "y": 462,
+   "z": 30,
+   "parent": "body",
+   "pivot": [
+    435,
+    615
+   ]
+  },
+  {
+   "id": "string-L",
+   "image": "parts/string-L.png",
+   "x": 366,
+   "y": 508,
+   "z": 35,
+   "parent": "torso",
+   "pivot": [
+    390,
+    576
+   ]
+  },
+  {
+   "id": "string-R",
+   "image": "parts/string-R.png",
+   "x": 438,
+   "y": 498,
+   "z": 35,
+   "parent": "torso",
+   "pivot": [
+    475,
+    573
+   ]
+  },
+  {
+   "id": "arm-L",
+   "image": "parts/arm-L.png",
+   "x": 226,
+   "y": 544,
+   "z": 40,
+   "parent": "torso",
+   "pivot": [
+    331,
+    569
+   ],
+   "slots": {
+    "down": {
+     "image": "parts/arm-L.png",
+     "x": 226,
+     "y": 544
+    }
+   }
+  },
+  {
+   "id": "arm-R",
+   "image": "parts/arm-R.png",
+   "x": 516,
+   "y": 544,
+   "z": 40,
+   "parent": "torso",
+   "pivot": [
+    544,
+    569
+   ],
+   "slots": {
+    "down": {
+     "image": "parts/arm-R.png",
+     "x": 516,
+     "y": 544
+    },
+    "wave": {
+     "image": "parts/arm-R-wave.png",
+     "x": 516,
+     "y": 546
+    }
+   }
+  },
+  {
+   "id": "hood",
+   "image": "parts/hood.png",
+   "x": 174,
+   "y": 96,
+   "z": 50,
+   "parent": "head",
+   "pivot": [
+    436,
+    324
+   ]
+  },
+  {
+   "id": "horn-L",
+   "image": "parts/horn-L.png",
+   "x": 300,
+   "y": 84,
+   "z": 52,
+   "parent": "head",
+   "pivot": [
+    340,
+    139
+   ]
+  },
+  {
+   "id": "horn-R",
+   "image": "parts/horn-R.png",
+   "x": 496,
+   "y": 84,
+   "z": 52,
+   "parent": "head",
+   "pivot": [
+    542,
+    139
+   ]
+  },
+  {
+   "id": "ear-L",
+   "image": "parts/ear-L.png",
+   "x": 172,
+   "y": 134,
+   "z": 55,
+   "parent": "head",
+   "pivot": [
+    250,
+    212
+   ]
+  },
+  {
+   "id": "ear-R",
+   "image": "parts/ear-R.png",
+   "x": 562,
+   "y": 134,
+   "z": 55,
+   "parent": "head",
+   "pivot": [
+    631,
+    215
+   ]
+  },
+  {
+   "id": "third-eye",
+   "image": "parts/third-eye.png",
+   "x": 370,
+   "y": 134,
+   "z": 56,
+   "parent": "head",
+   "pivot": [
+    438,
+    173
+   ],
+   "slots": {
+    "closed": {
+     "image": "parts/third-eye.png",
+     "x": 370,
+     "y": 134
+    },
+    "half": {
+     "image": "parts/third-eye-half.png",
+     "x": 366,
+     "y": 137
+    },
+    "open": {
+     "image": "parts/third-eye-open.png",
+     "x": 366,
+     "y": 137
+    }
+   }
+  },
+  {
+   "id": "face",
+   "image": "parts/face.png",
+   "x": 270,
+   "y": 240,
+   "z": 60,
+   "parent": "head",
+   "pivot": [
+    436,
+    371
+   ]
+  },
+  {
+   "id": "bangs",
+   "image": "parts/bangs.png",
+   "x": 296,
+   "y": 224,
+   "z": 80,
+   "parent": "head",
+   "pivot": [
+    432,
+    309
+   ]
+  },
+  {
+   "id": "eye-L",
+   "image": "parts/eye-L.png",
+   "x": 332,
+   "y": 358,
+   "z": 70,
+   "parent": "head",
+   "pivot": [
+    371,
+    391
+   ],
+   "slots": {
+    "open": {
+     "image": "parts/eye-L.png",
+     "x": 332,
+     "y": 358
+    },
+    "closed": {
+     "image": "parts/eye-closed-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "focus": {
+     "image": "parts/eye-focus-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "half": {
+     "image": "parts/eye-half-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "heart": {
+     "image": "parts/eye-heart-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "look-up": {
+     "image": "parts/eye-lookup-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "sleepy": {
+     "image": "parts/eye-sleepy-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "smile": {
+     "image": "parts/eye-smile-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "star": {
+     "image": "parts/eye-star-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "swirl": {
+     "image": "parts/eye-swirl-L.png",
+     "x": 308,
+     "y": 338
+    },
+    "wide": {
+     "image": "parts/eye-wide-L.png",
+     "x": 308,
+     "y": 338
+    }
+   }
+  },
+  {
+   "id": "eye-R",
+   "image": "parts/eye-R.png",
+   "x": 470,
+   "y": 356,
+   "z": 70,
+   "parent": "head",
+   "pivot": [
+    510,
+    389
+   ],
+   "slots": {
+    "open": {
+     "image": "parts/eye-R.png",
+     "x": 470,
+     "y": 356
+    },
+    "closed": {
+     "image": "parts/eye-closed-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "focus": {
+     "image": "parts/eye-focus-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "half": {
+     "image": "parts/eye-half-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "heart": {
+     "image": "parts/eye-heart-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "look-up": {
+     "image": "parts/eye-lookup-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "sleepy": {
+     "image": "parts/eye-sleepy-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "smile": {
+     "image": "parts/eye-smile-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "star": {
+     "image": "parts/eye-star-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "swirl": {
+     "image": "parts/eye-swirl-R.png",
+     "x": 428,
+     "y": 338
+    },
+    "wide": {
+     "image": "parts/eye-wide-R.png",
+     "x": 428,
+     "y": 338
+    }
+   }
+  },
+  {
+   "id": "iris-L",
+   "image": "parts/iris-L.png",
+   "x": 348,
+   "y": 364,
+   "z": 71,
+   "parent": "head",
+   "pivot": [
+    374,
+    390
+   ]
+  },
+  {
+   "id": "iris-R",
+   "image": "parts/iris-R.png",
+   "x": 478,
+   "y": 372,
+   "z": 71,
+   "parent": "head",
+   "pivot": [
+    499,
+    394
+   ]
+  },
+  {
+   "id": "mouth",
+   "image": "parts/mouth.png",
+   "x": 420,
+   "y": 442,
+   "z": 72,
+   "parent": "head",
+   "pivot": [
+    439,
+    447
+   ],
+   "slots": {
+    "smile": {
+     "image": "parts/mouth.png",
+     "x": 420,
+     "y": 442
+    },
+    "cat": {
+     "image": "parts/mouth-cat.png",
+     "x": 415,
+     "y": 438
+    },
+    "mid": {
+     "image": "parts/mouth-mid.png",
+     "x": 389,
+     "y": 438
+    },
+    "o": {
+     "image": "parts/mouth-o.png",
+     "x": 402,
+     "y": 425
+    },
+    "small": {
+     "image": "parts/mouth-small.png",
+     "x": 392,
+     "y": 446
+    },
+    "wide": {
+     "image": "parts/mouth-wide.png",
+     "x": 388,
+     "y": 428
+    }
+   }
+  },
+  {
+   "id": "blush",
+   "image": "parts/blush.png",
+   "x": 290,
+   "y": 410,
+   "z": 73,
+   "parent": "head",
+   "pivot": [
+    430,
+    442
+   ],
+   "opacityParam": "blush"
+  },
+  {
+   "id": "fx-sweat",
+   "image": "parts/fx-sweat.png",
+   "x": 548,
+   "y": 266,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    575,
+    309
+   ],
+   "opacityParam": "fx.sweat"
+  },
+  {
+   "id": "fx-tear",
+   "image": "parts/fx-tear.png",
+   "x": 300,
+   "y": 388,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    319,
+    418
+   ],
+   "opacityParam": "fx.tear"
+  },
+  {
+   "id": "fx-zzz",
+   "image": "parts/fx-zzz.png",
+   "x": 610,
+   "y": 96,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    659,
+    157
+   ],
+   "opacityParam": "fx.zzz"
+  },
+  {
+   "id": "fx-question",
+   "image": "parts/fx-question.png",
+   "x": 606,
+   "y": 210,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    637,
+    258
+   ],
+   "opacityParam": "fx.question"
+  },
+  {
+   "id": "fx-exclaim",
+   "image": "parts/fx-exclaim.png",
+   "x": 628,
+   "y": 166,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    637,
+    215
+   ],
+   "opacityParam": "fx.exclaim"
+  },
+  {
+   "id": "fx-note",
+   "image": "parts/fx-note.png",
+   "x": 606,
+   "y": 90,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    630,
+    125
+   ],
+   "opacityParam": "fx.note"
+  },
+  {
+   "id": "fx-heart",
+   "image": "parts/fx-heart.png",
+   "x": 558,
+   "y": 304,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    587,
+    331
+   ],
+   "opacityParam": "fx.heart"
+  },
+  {
+   "id": "fx-sparkle",
+   "image": "parts/fx-sparkle.png",
+   "x": 612,
+   "y": 74,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    647,
+    109
+   ],
+   "opacityParam": "fx.sparkle"
+  },
+  {
+   "id": "fx-puff",
+   "image": "parts/fx-puff.png",
+   "x": 276,
+   "y": 452,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    319,
+    481
+   ],
+   "opacityParam": "fx.puff"
+  },
+  {
+   "id": "fx-anger",
+   "image": "parts/fx-anger.png",
+   "x": 610,
+   "y": 166,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    641,
+    191
+   ],
+   "opacityParam": "fx.anger"
+  },
+  {
+   "id": "fx-bubble",
+   "image": "parts/fx-bubble.png",
+   "x": 274,
+   "y": 468,
+   "z": 90,
+   "parent": "head",
+   "pivot": [
+    299,
+    489
+   ],
+   "opacityParam": "fx.bubble"
+  },
+  {
+   "id": "third-eye-glow",
+   "image": "parts/third-eye-glow.png",
+   "x": 374,
+   "y": 94,
+   "z": 57,
+   "parent": "head",
+   "pivot": [
+    438,
+    158
+   ],
+   "opacityParam": "thirdEye.glow",
+   "blend": "lighter"
+  }
+ ],
+ "groups": {
+  "body": {
+   "pivot": [
+    435,
+    1101
+   ]
+  },
+  "head": {
+   "parent": "body",
+   "pivot": [
+    435,
+    517
+   ]
+  }
+ },
+ "clips": [
+  "clips/click.json",
+  "clips/cry.json",
+  "clips/done.json",
+  "clips/drag.json",
+  "clips/error.json",
+  "clips/fall-asleep.json",
+  "clips/happy.json",
+  "clips/idle.json",
+  "clips/idle-bored.json",
+  "clips/idle-happy.json",
+  "clips/idle-miss.json",
+  "clips/idle-shy.json",
+  "clips/idle-sleepy.json",
+  "clips/land.json",
+  "clips/listen.json",
+  "clips/look-around.json",
+  "clips/nod.json",
+  "clips/pout.json",
+  "clips/read.json",
+  "clips/shake-head.json",
+  "clips/sleep.json",
+  "clips/snack.json",
+  "clips/sneeze.json",
+  "clips/surprised.json",
+  "clips/talk.json",
+  "clips/think.json",
+  "clips/third-eye.json",
+  "clips/tilt-head.json",
+  "clips/wake-up.json",
+  "clips/walk.json",
+  "clips/walk_left.json",
+  "clips/walk_right.json",
+  "clips/wave.json",
+  "clips/working.json",
+  "clips/yawn.json"
+ ],
+ "expressions": "expressions.json"
+}

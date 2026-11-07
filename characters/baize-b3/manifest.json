@@ -1,0 +1,231 @@
+{
+ "id": "baize-b3",
+ "name": "白泽连帽衫（B3）",
+ "version": "1.0.0",
+ "renderer": "rig",
+ "rig": "rig/rig.json",
+ "animations": {
+  "idle": "rig:idle",
+  "click": "rig:click",
+  "drag": "rig:drag",
+  "happy": "rig:happy",
+  "sleep": "rig:sleep",
+  "talk": "rig:talk",
+  "think": "rig:think",
+  "pout": "rig:pout",
+  "walk": "rig:walk",
+  "walk_right": "rig:walk_right",
+  "walk_left": "rig:walk_left",
+  "working": "rig:working",
+  "done": "rig:done",
+  "error": "rig:error",
+  "wave": "rig:wave",
+  "look-around": "rig:look-around",
+  "yawn": "rig:yawn",
+  "fall-asleep": "rig:fall-asleep",
+  "wake-up": "rig:wake-up",
+  "tilt-head": "rig:tilt-head",
+  "listen": "rig:listen",
+  "nod": "rig:nod",
+  "shake-head": "rig:shake-head",
+  "land": "rig:land",
+  "idle-happy": "rig:idle-happy",
+  "idle-bored": "rig:idle-bored",
+  "idle-miss": "rig:idle-miss",
+  "idle-shy": "rig:idle-shy",
+  "idle-sleepy": "rig:idle-sleepy",
+  "third-eye": "rig:third-eye",
+  "read": "rig:read",
+  "snack": "rig:snack",
+  "sneeze": "rig:sneeze",
+  "dance": "sprite:dance",
+  "surprised": "rig:surprised",
+  "cry": "rig:cry",
+  "sit": "sprite:sit",
+  "sit-idle": "sprite:sit-idle",
+  "hide-in-hood": "sprite:hide-in-hood"
+ },
+ "emotion": {
+  "rates": {
+   "happy": 0.08,
+   "bored": 0.04,
+   "angry": 0.01,
+   "miss": 0.02
+  },
+  "gains": {
+   "click": {
+    "happy": 0.08,
+    "bored": -0.15
+   },
+   "drag": {
+    "happy": 0.12,
+    "bored": -0.25,
+    "angry": -0.05
+   },
+   "chat": {
+    "happy": 0.15,
+    "bored": -0.3,
+    "miss": -0.4
+   }
+  }
+ },
+ "behavior": {
+  "temperature": 1.2,
+  "cooldownMs": 30000,
+  "maxConsecutive": 2,
+  "repeatPenalty": 0.5
+ },
+ "scenes": [
+  {
+   "id": "idle_spontaneous",
+   "candidates": [
+    {
+     "action": "happy",
+     "baseWeight": 0.8,
+     "emotionAffinity": {
+      "happy": 0.5
+     }
+    },
+    {
+     "action": "think",
+     "baseWeight": 1.0,
+     "emotionAffinity": {
+      "bored": 0.3
+     }
+    },
+    {
+     "action": "sleep",
+     "baseWeight": 0.6,
+     "emotionAffinity": {
+      "bored": 0.6,
+      "happy": -0.4
+     }
+    },
+    {
+     "action": "look-around",
+     "baseWeight": 0.7
+    },
+    {
+     "action": "snack",
+     "baseWeight": 0.5,
+     "emotionAffinity": {
+      "bored": 0.4
+     }
+    },
+    {
+     "action": "read",
+     "baseWeight": 0.5,
+     "emotionAffinity": {
+      "bored": 0.4
+     }
+    },
+    {
+     "action": "dance",
+     "baseWeight": 0.5,
+     "emotionAffinity": {
+      "happy": 0.6
+     }
+    },
+    {
+     "action": "third-eye",
+     "baseWeight": 0.4
+    },
+    {
+     "action": "sneeze",
+     "baseWeight": 0.4
+    },
+    {
+     "action": "wave",
+     "baseWeight": 0.3,
+     "emotionAffinity": {
+      "happy": 0.3
+     }
+    },
+    {
+     "action": "idle-happy",
+     "baseWeight": 0.5,
+     "emotionAffinity": {
+      "happy": 0.8
+     }
+    },
+    {
+     "action": "idle-bored",
+     "baseWeight": 0.6,
+     "emotionAffinity": {
+      "bored": 0.7
+     }
+    },
+    {
+     "action": "idle-miss",
+     "baseWeight": 0.4,
+     "emotionAffinity": {
+      "miss": 0.8
+     }
+    },
+    {
+     "action": "idle-sleepy",
+     "baseWeight": 0.4,
+     "emotionAffinity": {
+      "bored": 0.5
+     }
+    }
+   ]
+  }
+ ],
+ "lines": {
+  "click": [
+   "哎哟！",
+   "别戳啦～",
+   "（眯起眼睛）嗯？",
+   "有什么事吗？"
+  ],
+  "drag": [
+   "哇——飞起来啦！",
+   "轻一点，会晕的！",
+   "（被拎起来的声音）"
+  ],
+  "happy": [
+   "嘿嘿～",
+   "开心！"
+  ],
+  "sleep": [
+   "zZ…"
+  ],
+  "talk": [
+   "我知道我知道！"
+  ],
+  "think": [
+   "让我想想…",
+   "（第三只眼微微发亮）"
+  ],
+  "pout": [
+   "哼，不理你了…才怪"
+  ],
+  "working": [
+   "在忙在忙！"
+  ],
+  "done": [
+   "搞定啦！"
+  ],
+  "error": [
+   "哎呀，出错了…"
+  ],
+  "idle_spontaneous": [
+   "（打了个小盹）",
+   "（伸了个懒腰）",
+   "（歪着头看你）",
+   "（开心地扭了扭）",
+   "（东张西望中）",
+   "（偷偷吃了口零食）",
+   "（翻了一页书）",
+   "（跳了个小舞步）",
+   "（第三只眼扫视四周）",
+   "（打了个小喷嚏）",
+   "（朝你挥挥手）",
+   "（无聊地晃着腿）",
+   "（有点想你）",
+   "（眼皮开始打架）",
+   "（害羞地捂住脸）"
+  ]
+ }
+}

@@ -145,33 +145,57 @@ const storage = await electronApp.evaluate(({ app, safeStorage }) => ({
 console.log(`safeStorage: ${JSON.stringify(storage)}`)
 
 // --- 3. canvas alpha readback on the pet ------------------------------------
+// Both renderers must survive the readback: video packs draw into <video>
+// (frame center must be inside the body), rig packs draw into <canvas>
+// (first opaque pixel scanning up from the 246/256 ground line).
 const pixel = await until(
   async () => {
     return petPage.evaluate(async () => {
       const video = document.querySelector('video')
-      if (!video || video.readyState < 2 || video.videoWidth === 0) return null
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+      if (video) {
+        if (video.readyState < 2 || video.videoWidth === 0) return null
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(video, 0, 0)
+        // Frame center of the placeholder creature — must be inside the body.
+        const data = ctx.getImageData(
+          Math.floor(video.videoWidth / 2),
+          Math.floor(video.videoHeight / 2),
+          1,
+          1,
+        ).data
+        return { alpha: data[3], red: data[0] }
+      }
+      const canvas = document.querySelector('canvas')
+      if (!canvas || !canvas.width || !canvas.height) return null
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      ctx.drawImage(video, 0, 0)
-      // Frame center of the placeholder creature — must be inside the body.
-      const data = ctx.getImageData(
-        Math.floor(video.videoWidth / 2),
-        Math.floor(video.videoHeight / 2),
-        1,
-        1,
-      ).data
-      return { alpha: data[3], red: data[0] }
+      const groundY = Math.round((canvas.height * 246) / 256)
+      for (let y = groundY; y > 0; y--) {
+        const d = ctx.getImageData(Math.floor(canvas.width / 2), y, 1, 1).data
+        if (d[3] > 0) {
+          return { alpha: d[3], red: d[0], y, groundY }
+        }
+        // Scan a small neighbourhood: the pet is centered but not always
+        // exactly on the centre column.
+        for (const dx of [-8, 8, -16, 16]) {
+          const dn = ctx.getImageData(Math.floor(canvas.width / 2) + dx, y, 1, 1).data
+          if (dn[3] > 0) {
+            return { alpha: dn[3], red: dn[0], y, groundY }
+          }
+        }
+      }
+      return null
     })
   },
   20_000,
-  'video frame ready for canvas readback',
+  'pet frame ready for canvas readback',
 )
 check(
   'canvas getImageData does not throw (canvas not tainted)',
   pixel !== null && pixel.alpha > 0,
-  `center pixel ${JSON.stringify(pixel)}`,
+  `pet pixel ${JSON.stringify(pixel)}`,
 )
 
 // --- 4. click IPC opens the chat window -------------------------------------

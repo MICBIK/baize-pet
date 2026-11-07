@@ -15,7 +15,8 @@
       "!**/*.md",
       "!docs",
       "!**/.github",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!**/characters"
     ]
   },
   "formatter": {

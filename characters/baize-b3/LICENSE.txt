@@ -1,0 +1,13 @@
+BaiZe B3 layered rig character pack ("白泽连帽衫")
+
+Artwork derived from the project's own variant-B character design
+(demo/baize-design, variants/variant-b.js). The rig master and part
+images were generated with the tzcode.top gpt-image-2.5 image model
+using demo/pet-demo/b3-frames/ref-standard(-s).png as the style
+reference, then segmented, joint-extended and exported by the
+reproducible pipeline in tools/rig-pipeline/ (see README.md for the
+full rebuild command list). Sprite sheets under sprites/ are the
+normalized atlas strips from demo/pet-demo/b3-sprites-v2 (normalized
+by build-sprites-2.py).
+
+Distributed under the same license as the repository code: AGPL-3.0-only.
