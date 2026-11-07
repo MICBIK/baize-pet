@@ -430,6 +430,11 @@
      "x": 420,
      "y": 442
     },
+    "cat": {
+     "image": "parts/mouth-cat.png",
+     "x": 415,
+     "y": 438
+    },
     "mid": {
      "image": "parts/mouth-mid.png",
      "x": 389,

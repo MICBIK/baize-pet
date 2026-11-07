@@ -125,7 +125,7 @@ def clean_edge_halo(img):
 # (mouth-cat's grey chin smudge). The face part already carries clean skin
 # under the mouth, so a mouth image only needs its own strokes.
 MOUTH_MIN_COMPONENT = 5   # master px; smaller ink islands are noise
-MOUTH_MIN_INK = 60        # master px of pink mouth interior a slot needs;
+MOUTH_MIN_INK = 60        # master px of kept mouth ink a slot needs;
                           # below it the patch is chin/lining debris only
 
 
@@ -170,7 +170,10 @@ def clean_mouth_patch(patch, ox, oy, face):
         if stats[i, cv2.CC_STAT_AREA] >= MOUTH_MIN_COMPONENT:
             keep[lab == i] = 1
     rose = ((hue >= 150) | (hue <= 3)) & (sat > 45)
-    ink_px = int((keep.astype(bool) & rose).sum())
+    # kept ink = every stroke a slot carries (pink interior, dark outline,
+    # brown line) — MOUTH_MIN_INK polices mouth ink, not rose interior alone:
+    # the cat ω is a line mouth with no pink interior at all
+    ink_px = int(keep.astype(bool).sum())
     keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     keep = fill_holes(keep)
     soft = cv2.dilate(keep, np.ones((3, 3), np.uint8)).astype(np.float32)
@@ -480,7 +483,7 @@ def main():
                     if ink_px < MOUTH_MIN_INK:
                         # nothing but chin/lining left: let the solver fall
                         # back to the default mouth instead of a smudge (F4)
-                        print(f'drop mouth slot {shape}: {ink_px} pink px')
+                        print(f'drop mouth slot {shape}: {ink_px} ink px')
                         continue
                     im = Image.fromarray(cleaned)
                 half = im.resize(

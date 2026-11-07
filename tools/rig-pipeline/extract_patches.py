@@ -348,6 +348,65 @@ def main():
         report[name] = entry
         print(f'{name}: derived from {src} (vertical flip)')
 
+    # R6-5 (method B): the cat mouth as a program-drawn ω. The generated
+    # variant's patch carried only a grey chin smudge (4 rose px, dropped at
+    # export) and no image API key is available in this environment, so the
+    # slot is drawn directly: two downward arcs joined at a small centre
+    # tip — width 1.1x the master's own smile line, stroke colour/width from
+    # the smile's ink, 4x supersampled then area-downscaled. The median
+    # stroke (hue 11, sat 87) is brown-line ink, so clean_mouth_patch keeps
+    # it, and the arcs' shared endpoint forms the centre tip.
+    def draw_cat_mouth():
+        bx0, by0, bx1, by1 = MOUTH_BOX
+        box = master[by0:by1, bx0:bx1]
+        rgb = cv2.cvtColor(box, cv2.COLOR_BGRA2RGBA)
+        hsv = cv2.cvtColor(rgb[..., :3], cv2.COLOR_RGB2HSV).astype(np.int32)
+        hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+        ink = (box[..., 3] > 100) & (
+            ((hue >= 150) | (hue <= 8)) & (sat > 45)          # pink interior
+            | (val < 120)                                     # dark outline
+            | ((hue <= 20) & (sat >= 45) & (val < 250)))      # brown stroke
+        ys, xs = np.where(ink)
+        if len(ys) < 20:
+            print('mouth-cat: no measurable smile line, slot left to solver fallback')
+            return
+        smile_w = int(xs.max() - xs.min() + 1)
+        cx = int((xs.max() + xs.min()) / 2) + bx0
+        corner_y = int((ys.max() + ys.min()) / 2) + by0
+        col = tuple(int(v) for v in np.median(box[..., :3][ink], axis=0))  # BGR
+        runs = []
+        for c in range(ink.shape[1]):
+            n = 0
+            for v in ink[:, c]:
+                if v:
+                    n += 1
+                elif n:
+                    runs.append(n)
+                    n = 0
+            if n:
+                runs.append(n)
+        stroke = max(2, int(round(float(np.median(runs)))))
+        w = max(3 * stroke, int(round(smile_w * 1.1)))   # 1.0-1.2x smile line
+        r = w // 4
+        S, m = 4, 6
+        pw, ph = w + 2 * m, r + stroke + 2 * m
+        big = np.zeros((ph * S, pw * S, 4), np.uint8)
+        jx, jy = (m + w // 2) * S, (m + stroke // 2) * S
+        for sgn in (-1, 1):
+            cv2.ellipse(big, (jx + sgn * r * S, jy), (r * S, r * S), 0,
+                        0, 180, (col[0], col[1], col[2], 255), stroke * S,
+                        cv2.LINE_AA)
+        patch = cv2.resize(big, (pw, ph), interpolation=cv2.INTER_AREA)
+        out = OUT / 'mouth-cat.png'
+        cv2.imwrite(str(out), patch)
+        ox, oy = cx - w // 2 - m, corner_y - (m + stroke // 2)
+        report['mouth-cat'] = {'image': str(out.relative_to(ROOT)),
+                               'offset': [ox, oy], 'mask': 'drawn:omega'}
+        print(f'mouth-cat: drawn omega w={w} stroke={stroke} '
+              f'col(BGR)={col} offset=({ox},{oy})')
+
+    draw_cat_mouth()
+
     # keep entries this script does not produce (gen_mouths small/mid/o,
     # extract_third_eye half/open) so a re-run never drops other slots
     report_path = OUT / 'patches-report.json'
