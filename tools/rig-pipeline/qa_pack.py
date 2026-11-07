@@ -453,7 +453,9 @@ class PackQA:
         inside = opening
         lining_ok = f['de_l'] <= DE_LINING
         inner_white_ok = f['de_w'] <= DE_WHITE
-        hairwhite = (f['lab'][..., 0] > P6_HAIRCUT_L * 2.55) & (f['chroma'] < P6_HAIRCUT_C)
+        hairwhite = ((f['lab'][..., 0] > P6_HAIRCUT_L * 2.55)
+                     & (f['chroma'] < P6_HAIRCUT_C)
+                     & ((f['lab'][..., 2] - f['lab'][..., 1]) < 5))
         in_viol = (f['a'] < 128) | ~(lining_ok | inner_white_ok) \
             | (f['ink'] & ~self.hood_ink_ok)
         out_viol = (f['a'] < 128) | ((f['de_w'] > DE_WHITE) & ~(f['ink'] & self.hood_ink_ok))
@@ -755,7 +757,8 @@ class PackQA:
             chroma = np.sqrt((lab[..., 1] - 128) ** 2 + (lab[..., 2] - 128) ** 2)
             opening = np.array(Image.open(QA / 'hood-opening.png').convert('L')) > 127 \
                 if (QA / 'hood-opening.png').exists() else np.zeros((H, W), bool)
-            hairwhite = ((L8 > P6_HAIRCUT_L * 2.55) & (chroma < P6_HAIRCUT_C) & h_a)
+            hairwhite = ((L8 > P6_HAIRCUT_L * 2.55) & (chroma < P6_HAIRCUT_C)
+                         & ((lab[..., 2] - lab[..., 1]) < 5) & h_a)
             # R7-2.4 targets the SIDE-HAIR COPIES hiding under the face
             # stack — the master's own white hood interior visible at rest
             # (upper half of the opening) is legitimate content and lives

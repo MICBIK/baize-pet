@@ -36,13 +36,16 @@ PART_META = {
     'arm-L':     {'z': 40, 'parent': 'torso', 'slot_key': 'arm.L.slot'},
     'arm-R':     {'z': 40, 'parent': 'torso', 'slot_key': 'arm.R.slot'},
     'hood':      {'z': 50, 'parent': 'head'},
-    'horn-L':    {'z': 52, 'parent': 'head'},
-    'horn-R':    {'z': 52, 'parent': 'head'},
     'ear-L':     {'z': 55, 'parent': 'head'},
     'ear-R':     {'z': 55, 'parent': 'head'},
-    'third-eye': {'z': 56, 'parent': 'head'},
     'face':      {'z': 60, 'parent': 'head'},
     'bangs':     {'z': 80, 'parent': 'head'},
+    # R7-1 z table: hood-front (the visible-at-rest shell) covers the face
+    # stack; horns are sewn on the front, the third eye rides above them.
+    'hood-front': {'z': 85, 'parent': 'head'},
+    'horn-L':    {'z': 86, 'parent': 'head'},
+    'horn-R':    {'z': 86, 'parent': 'head'},
+    'third-eye': {'z': 87, 'parent': 'head'},
     'eye-L':     {'z': 70, 'parent': 'head', 'slot_key': 'eye.shape'},
     'eye-R':     {'z': 70, 'parent': 'head', 'slot_key': 'eye.shape'},
     'iris-L':    {'z': 71, 'parent': 'head'},
@@ -62,7 +65,8 @@ PART_META = {
     'fx-anger':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.anger'},
     'fx-bubble':  {'z': 90, 'parent': 'head', 'opacityParam': 'fx.bubble'},
     # A4 third-eye-glow: pure amber soft light under the fx stack, additive.
-    'third-eye-glow': {'z': 57, 'parent': 'head', 'opacityParam': 'thirdEye.glow', 'blend': 'lighter'},
+    # R7-1: rides directly above the third-eye part (z 87 -> 88).
+    'third-eye-glow': {'z': 88, 'parent': 'head', 'opacityParam': 'thirdEye.glow', 'blend': 'lighter'},
 }
 
 
@@ -355,6 +359,15 @@ def main():
     if hood_opening_mask is not None:
         guarded['hood'][..., :3][hood_opening_mask] = hood_pre_guard[hood_opening_mask]
         print(f'hood lining restored inside opening: {int(hood_opening_mask.sum())} px')
+    # R7: the dome-slash band (above the opening's top rim) paints hood
+    # INTERIOR white in the back layer — the conflation guard would recolour
+    # it to the across-edge ink; restore it the same way as the lining.
+    slash_path = ART / 'qa' / 'hood-dome-slash.png'
+    if slash_path.exists():
+        slash = np.array(Image.open(slash_path).convert('L')) > 127
+        guarded['hood'][..., :3][slash] = (250, 250, 250)
+        guarded['hood'][..., 3][slash] = 255
+        print(f'hood dome-slash white restored: {int(slash.sum())} px')
     for pid, meta in PART_META.items():
         src = ART / 'parts-ext' / f'{pid}.png'
         if not src.exists():

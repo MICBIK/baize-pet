@@ -445,7 +445,7 @@ def main():
     # the top band's shell white lies outside the fill barrier's reach, and
     # the hidden pixels under the face stack need it as their material.
     hood_seed = (((images['hood'][..., 3] > 8) | opening_fill)
-                 & (master[..., 3] > 8) & (L > 100) & ~cover_up)
+                 & (master[..., 3] > 8) & (L > 100) & (L < 217) & ~cover_up)
     dist_o, (iy_o, ix_o) = ndimage.distance_transform_edt(
         ~hood_seed, return_indices=True)
     # hidden pixels whose MASTER pixel is bright fabric/skin copy the
@@ -1327,7 +1327,11 @@ def main():
         hair_fill_rgb[take_h] = master[..., :3][iy_h[take_h], ix_h[take_h]]
         if skin_band.any():
             inpaint_from(fimg, skin_band, skin_vis & ~dilate_mask(refill, 2), radius=6)
+        # hair wins the blend (w clipped at 0.5): a 50/50 skin/hair mix is
+        # exactly the mud band (L* 55-82, C* 6-25) the round-6 diagnosis
+        # called 灰褐色的泥状模糊
         w = cv2.GaussianBlur((skin_band * 255).astype(np.uint8), (9, 9), 2).astype(np.float32) / 255.0
+        w = np.minimum(w, 0.35)
         blend = (fimg[..., :3].astype(np.float32) * w[..., None]
                  + hair_fill_rgb.astype(np.float32) * (1 - w[..., None]))
         fimg[..., :3][refill] = blend[refill].astype(np.uint8)
@@ -1343,10 +1347,15 @@ def main():
     # inner-rim ink neighbourhood (the task book's 顶边、两侧边 along the
     # opening) — a blanket front_mask reach painted chin/neck rows as hair.
     band_total = 0
+    band_union = np.zeros((H, W), bool)
+    hood_seed_now = (((images['hood'][..., 3] > 8) & (L > 100) & (L < 217))
+                     | (opening_fill & (master[..., 3] > 8)
+                        & (L > 100) & (L < 217))) & ~cover_up
     for pid in ('face', 'bangs'):
         cl = claim[pid] & alpha
         band = (dilate_mask(cl, 18) & dilate_mask(rim_sel, 14) & ~cl
                 & ~rim_sel & front_mask & ~above_hood & (master[..., 3] > 8))
+        band_union |= band
         dist_h2, (iy_h2, ix_h2) = ndimage.distance_transform_edt(
             (~hair_vis) | dilate_mask(band, 2), return_indices=True)
         take_b = band & (dist_h2 <= 25)
@@ -1354,7 +1363,37 @@ def main():
             images[pid][..., :3][take_b] = master[..., :3][iy_h2[take_b], ix_h2[take_b]]
             images[pid][..., 3][take_b] = 255
             band_total += int(take_b.sum())
-    print(f'R7-1 transition bands (face+bangs): {band_total} px hair')
+        # every remaining band pixel copies its nearest non-ink hood pixel —
+        # gaps (no hair within 25 px) otherwise expose the back's own dome
+        # ink through the front on turnX/Y (round-7 P7 black slashes)
+        rest_b = band & ~take_b
+        if rest_b.any():
+            dist_n, (iy_n, ix_n) = ndimage.distance_transform_edt(
+                (~hood_seed_now) | dilate_mask(band, 2), return_indices=True)
+            fill_b = rest_b & (dist_n <= 30)
+            images[pid][..., :3][fill_b] = master[..., :3][iy_n[fill_b], ix_n[fill_b]]
+            images[pid][..., 3][fill_b] = 255
+            band_total += int(fill_b.sum())
+    # the back layer under the transition bands must be the hood's INNER
+    # white, not the master's dome ink: when the face stack (FAC +0.4) and
+    # the front (FAC -0.35) separate on turnX/Y, the exposed band is the
+    # hood interior — a master-ink copy there shows as a black slash (P7)
+    back_band = band_union & (images['hood'][..., 3] > 8)
+    images['hood'][..., :3][back_band] = (250, 250, 250)
+    images['hood'][..., 3][back_band] = 255
+    # above the opening's top rim the hood's dome-outline ink sits 0-40 px
+    # above the face claim; when face (FAC +0.4) and front (FAC -0.35)
+    # separate on turnX/Y that ink shows as a black slash (P7). The exposed
+    # band is hood interior — paint it white too.
+    dome_slash = (dilate_mask(claim['face'] & alpha, 40) & ~claim['face']
+                  & claim['hood'] & ~rim_sel & ~band_union
+                  & (np.arange(H)[:, None] < 262) & (master[..., 3] > 8))
+    images['hood'][..., :3][dome_slash] = (250, 250, 250)
+    images['hood'][..., 3][dome_slash] = 255
+    Image.fromarray((dome_slash * 255).astype(np.uint8)).save(
+        ART / 'qa' / 'hood-dome-slash.png')
+    print(f'R7-1 transition bands: back white underlay {int(back_band.sum())} px, '
+          f'dome-slash band {int(dome_slash.sum())} px')
 
     # --- R7-4.1: third-eye alpha cutoff ---------------------------------------
     # The alpha stops at the eye outline's outer edge: at most a 2 px AA
