@@ -325,6 +325,15 @@ class PackQA:
                     de_c = self._min_de(comp_lab, self.sel_cloth)
                     bad_color = de_c > DE_CLOTH
                 viol = exposed & (trans | (bad_color & ~ink))
+                # Round-6 residuals (documented, not gate-relaxed): at stress
+                # tilts the hood's own hem/rim artwork rides over the freshly
+                # exposed band — hood->torso sees the hem's AA tint the white
+                # collar wedge grey (torso content verified correct white),
+                # face->hood sees a <=4px see-through sliver where the face
+                # (FAC 0.4) and the hood rim (FAC -0.35) separate in opposite
+                # directions. Both are physical parallax gaps the master
+                # (rest-only) cannot answer; filling them would repaint
+                # rest-visible accepted artwork.
                 # AA exemption: isolated <=2 px components, up to the ratio cap
                 lbl, n = ndimage.label(viol)
                 if n:

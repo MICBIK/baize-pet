@@ -285,6 +285,14 @@ def conflation_guard(imgs, master):
             img = imgs[ids[low]]
             is_far = far == low
             sel = (img[ys, xs, 3] > 0) | is_far
+            # a lower pixel that already carries the master's own colour is
+            # correct rule-B content (the zipper tape crossing the strings'
+            # claims): recolouring it to the across-edge colour whitened the
+            # tape's edge at half scale (round-6 P1 probe)
+            cur = img[ys, xs, :3]
+            already = (np.abs(cur.astype(np.int16)
+                              - master[ys, xs, :3].astype(np.int16)).max(axis=1) <= 6)
+            sel = sel & ~(already & ~is_far)
             img[ys[sel], xs[sel], :3] = col[sel]
             img[ys[is_far], xs[is_far], 3] = 255
             touched += int(sel.sum())
@@ -361,6 +369,18 @@ def main():
         if box is None:
             continue
         x0, y0, x1, y1 = box
+        # Round 6: even-align the crop to the master pixel grid. An odd bbox
+        # origin resamples the part half a master pixel off the whole-master
+        # grid, and 1px master features (the zipper tape core) fall into the
+        # LANCZOS kernel's negative lobes — they come out as dark/light
+        # column pairs at pack scale (round-6 P1). Even origins make the
+        # part's resampling identical to the whole-master downscale the pack
+        # is judged against; content keeps its absolute position (the padded
+        # rows/columns are transparent, and mask-derived pivots are absolute).
+        x0 -= x0 & 1
+        y0 -= y0 & 1
+        x1 += x1 & 1
+        y1 += y1 & 1
         crop = Image.fromarray(img[y0:y1, x0:x1])
         ow, oh = crop.size
         crop = crop.resize((max(1, round(ow * SCALE)), max(1, round(oh * SCALE))), Image.LANCZOS)

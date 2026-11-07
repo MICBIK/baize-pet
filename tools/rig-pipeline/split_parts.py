@@ -609,6 +609,11 @@ def main():
                    & ~claim['string-R'] & ~claim['face'] & ~claim['mouth']
                    & ~claim['blush'] & ~claim['eye-L'] & ~claim['eye-R'])
     underlay(images['torso'], collar_core, collar_ring, torso_rgb, F=4, tag=3)
+    # R6-4 probe note: the master amber across the hood hem (with its dark
+    # trim) is the HOOD's own artwork — the torso under it is the white
+    # shell (visible at y>=502), so the round-2 white median IS the correct
+    # rule-B content here. An amber re-fill experiment painted the hood's
+    # hem colours into the torso and was reverted.
     # torso: back-fill behind the arms from the arms-behind variant (the
     # variant has no arms, so its pixels there are true torso cloth). The
     # strings exist in the variant too, so under the strings we inpaint
@@ -636,6 +641,17 @@ def main():
         images['torso'][fill] = behind[fill]; provenance[fill] = 4
         print(f'torso occlusion back-fill: {int(fill.sum())} px')
         string_fill = (claim['string-L'] | claim['string-R']) & torso_zone & ~claim['torso']
+        # R6-4: master content crossing the strings' claims (the zipper
+        # tape) stays master — the string's own AA blends with it, and the
+        # old blanket inpaint replaced the tape's amber under the strings,
+        # which showed as a lighter edge whenever the string's AA let it
+        # through. The guard only spares pixels that already carry torso
+        # content: where the torso is still empty the protected pixels are
+        # rule-B holes (the cord's own ink/amber in the master) and must be
+        # filled like the rest of the claim — P2 swing poses showed the
+        # background straight through them.
+        protected = (((A > 110) & (B > 140)) | (L < 100)) & alpha
+        string_fill &= ~(protected & (images['torso'][..., 3] > 0))
 
         def inpaint_band(img, m, radius=5):
             band = (m & alpha).astype(np.uint8) * 255
@@ -649,6 +665,130 @@ def main():
             provenance[ok] = 4
         inpaint_band(images['torso'], string_fill)
         print(f'torso string inpaint: {int(string_fill.sum())} px')
+
+    # --- R6-4: torso clean-up under the arms ---------------------------------
+    # (1) isolated ink blocks: torso ink (L<100) in components smaller than
+    # 200 px that do not touch the main outline AND where the master shows
+    # no ink are stray fragments of the old fills — delete and inpaint
+    # cloth. Master ink (the hem, the zipper pull, the pocket trims) is
+    # kept unconditionally.
+    # (2) the strings' +-25 deg sweep zone must be cloth only: torso pixels
+    # inside it where the master shows cloth but the torso carries anything
+    # else (the grey ghost blobs the string inpaint pulled from ink) are
+    # re-inpainted from cloth-only seeds.
+    # (3) the collar carries no transparent holes within 30 px below the
+    # hood.
+    # (4) the side-seam ink from armpit to hem (BODY_SIDE + mirror), drawn
+    # at 4x supersampling with the master's hem ink colour/width, hidden
+    # under the arms at rest.
+    t_lab = cv2.cvtColor(images['torso'][..., :3], cv2.COLOR_RGB2LAB).astype(int)
+    t_ink = (t_lab[..., 0] < 100) & (images['torso'][..., 3] > 128)
+    n_ink, lbl_ink, st_ink, _ = cv2.connectedComponentsWithStats(
+        t_ink.astype(np.uint8), connectivity=8)
+    del_mask = np.zeros((H, W), bool)
+    if n_ink > 1:
+        main_lbl = 1 + int(np.argmax(st_ink[1:, cv2.CC_STAT_AREA]))
+        main_grow = dilate_mask(lbl_ink == main_lbl, 6)
+        for i in range(1, n_ink):
+            if i == main_lbl or st_ink[i, cv2.CC_STAT_AREA] >= 200:
+                continue
+            comp = lbl_ink == i
+            if (comp & main_grow).any():
+                continue  # touches the main outline
+            if (comp & (L < 100) & alpha).any():
+                continue  # master has ink there: master content, keep
+            del_mask |= comp
+    if del_mask.any():
+        cloth_seed = ((t_lab[..., 0] >= 185) & (images['torso'][..., 3] > 128)
+                      & ~del_mask)
+        cloth_src = cv2.inpaint(
+            cv2.cvtColor(images['torso'][..., :3], cv2.COLOR_RGB2BGR),
+            (~cloth_seed).astype(np.uint8) * 255, 8, cv2.INPAINT_TELEA)
+        images['torso'][..., :3][del_mask] = cv2.cvtColor(
+            cloth_src, cv2.COLOR_BGR2RGB)[del_mask]
+        images['torso'][..., 3][del_mask] = 255
+        provenance[del_mask] = 4
+    print(f'torso isolated ink deleted: {int(del_mask.sum())} px')
+
+    # (2) string sweep cleanup: the strings sweep +-25 deg at runtime; every
+    # torso pixel in the sweep where the master shows cloth but the torso
+    # carries a ghost blob is re-inpainted from cloth-only seeds
+    m_white_cloth = ((L > 216)
+                     & ((A - 128) ** 2 + (B - 128) ** 2 < 144)
+                     & (master[..., 3] > 128))
+    for sid in ('string-L', 'string-R'):
+        s_claim = claim[sid] & alpha
+        ys_s, xs_s = np.where(s_claim)
+        pv = (float(xs_s.mean()), float(ys_s.mean()))
+        sweep = np.zeros((H, W), bool)
+        for deg in (-25, 25):
+            M = cv2.getRotationMatrix2D(pv, deg, 1.0)
+            w = cv2.warpAffine(s_claim.astype(np.uint8) * 255, M, (W, H),
+                               flags=cv2.INTER_NEAREST, borderValue=0)
+            sweep |= w > 0
+        sweep |= s_claim
+        sweep = dilate_mask(sweep, 4)
+        ghost = (sweep & (images['torso'][..., 3] > 128) & m_white_cloth
+                 & ~((t_lab[..., 0] > 216)
+                     & ((t_lab[..., 1] - 128) ** 2 + (t_lab[..., 2] - 128) ** 2 < 144)))
+        if ghost.any():
+            cseed = ((t_lab[..., 0] >= 185) & (images['torso'][..., 3] > 128) & ~ghost)
+            csrc = cv2.inpaint(cv2.cvtColor(images['torso'][..., :3], cv2.COLOR_RGB2BGR),
+                               (~cseed).astype(np.uint8) * 255, 8, cv2.INPAINT_TELEA)
+            images['torso'][..., :3][ghost] = cv2.cvtColor(csrc, cv2.COLOR_BGR2RGB)[ghost]
+            images['torso'][..., 3][ghost] = 255
+            provenance[ghost] = 4
+        print(f'{sid} sweep cleanup: {int(ghost.sum())} px')
+
+    # (3) collar: no transparent holes within 30 px of the hood bottom
+    hood_bottom_y = int(np.where(claim['hood'].any(axis=1))[0].max())
+    collar_band = np.zeros((H, W), bool)
+    collar_band[max(0, hood_bottom_y - 30):hood_bottom_y + 30, :] = True
+    t_solid = images['torso'][..., 3] > 8
+    t_holes = ndimage.binary_fill_holes(t_solid) & ~t_solid & collar_band
+    if t_holes.any():
+        images['torso'][..., :3][t_holes] = torso_rgb
+        images['torso'][..., 3][t_holes] = 255
+        provenance[t_holes] = 3
+        print(f'collar holes filled: {int(t_holes.sum())} px')
+
+    # (4) side-seam ink, armpit to hem: BODY_SIDE per-row medians + mirror,
+    # drawn at 4x supersampling with the master's hem ink colour/width and
+    # hidden under the arms at rest
+    hem_ink_sel = (L < 100) & alpha & (np.arange(H)[:, None] > 740)
+    hem_rgb = (39, 24, 14)
+    if hem_ink_sel.any():
+        hem_rgb = tuple(int(c) for c in np.median(master[..., :3][hem_ink_sel], axis=0))
+    hem_width = 7
+    from scipy.interpolate import splprep, splev
+    S4 = 4
+    for side in ('L', 'R'):
+        path = [(x if side == 'L' else 2 * 435 - x, y) for x, y in BODY_SIDE['L']]
+        arr = np.array(path, float)
+        tck, _ = splprep([arr[:, 0], arr[:, 1]], s=len(arr) * 2.0)
+        u = np.linspace(0, 1, 300)
+        xs_s, ys_s = splev(u, tck)
+        x_lo = int(max(0, min(xs_s.min(), 870 - xs_s.max())) - 12)
+        x_hi = int(min(W, max(xs_s.max(), 870 - xs_s.min())) + 12)
+        y_lo = int(max(0, ys_s.min() - 12))
+        y_hi = int(min(H, ys_s.max() + 12))
+        cw, ch = (x_hi - x_lo) * S4, (y_hi - y_lo) * S4
+        canvas4 = np.zeros((ch, cw, 3), np.uint8)
+        p4 = np.column_stack([(xs_s - x_lo) * S4, (ys_s - y_lo) * S4]).astype(np.int32)
+        cv2.polylines(canvas4, [p4], False, hem_rgb, thickness=hem_width * S4,
+                      lineType=cv2.LINE_AA)
+        down = cv2.resize(canvas4, (x_hi - x_lo, y_hi - y_lo),
+                          interpolation=cv2.INTER_AREA)
+        ink_strength = down.max(axis=2) > 40
+        ink_mask = np.zeros((H, W), bool)
+        ink_mask[y_lo:y_hi, x_lo:x_hi] = ink_strength > 0
+        ink_mask &= (claim['arm-L'] | claim['arm-R'])  # hidden at rest
+        ink_mask &= alpha & (images['torso'][..., 3] > 8)
+        take_ink = ink_mask & ~((L < 100) & alpha)  # not over master ink
+        images['torso'][..., :3][take_ink] = np.array(hem_rgb, np.uint8)
+        images['torso'][..., 3][take_ink] = 255
+        provenance[take_ink] = 1
+    print('torso side-seam ink drawn (hidden under the arms at rest)')
 
     # arm: shoulder extension into the body — take the torso part's own
     # pixels there (same cloth colour at rest, plausible when the arm lifts)
