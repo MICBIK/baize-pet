@@ -95,6 +95,7 @@ P6_MUD_C = (6.0, 25.0)
 P6_MUD_DE = 12.0
 P6_AMBER_HUE = (15.0, 50.0)   # HSV degrees, saturation > P6_AMBER_SAT
 P6_AMBER_SAT = 0.35
+P6_AMBER_VAL_MIN = 0.35
 P6_LINING_OUTER = 3           # px beyond HOOD_OPENING where lining must be 0
 P6_HAIRCUT_L = 85.0           # hair-white L* inside the opening (R7-2.4)
 P6_HAIRCUT_C = 12.0
@@ -195,7 +196,27 @@ class PackQA:
                        'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'bangs'):
                 hood_other |= m
         self.face_ink_ok = dil(ink & ~dil(patch_union, 2), 2)
-        self.hood_ink_ok = dil(ink & ~dil(hood_other, 2), ARC_PROX // 2)
+        hood_ink = dil(ink & ~dil(hood_other, 2), ARC_PROX // 2)
+        # R7-2: the dome outline's own ink crossing the ear/horn claims is
+        # KEPT in the back layer (the ear swing exposes it; P3 demands it).
+        # The split pipeline saves the fitted Kasa circles (qa/arc-fit.json):
+        # ink within 8 px of a fitted arc is the outline continuation and is
+        # legitimate hood ink for the P2 validators.
+        arc_path = ART / 'qa' / 'arc-fit.json'
+        if arc_path.exists():
+            fits = json.loads(arc_path.read_text(encoding='utf-8'))
+            mw, mh = self.master_full.shape[1], self.master_full.shape[0]
+            yy, xx = np.mgrid[0:mh, 0:mw]
+            dome_ink = np.zeros((mh, mw), bool)
+            for pid, (ccx, ccy, rad) in fits.items():
+                d = np.sqrt((xx - ccx) ** 2 + (yy - ccy) ** 2)
+                dome_ink |= np.abs(d - rad) <= 8.0
+            dome_ink &= (cv2.cvtColor(self.master_full[..., :3],
+                                      cv2.COLOR_RGB2GRAY) < 110)
+            dome_ink_pack = cv2.resize(dome_ink.astype(np.float32), self.size,
+                                       interpolation=cv2.INTER_AREA) > 0.01
+            hood_ink = hood_ink | dil(dome_ink_pack & hood_other, 2)
+        self.hood_ink_ok = hood_ink
 
     # --- parts & poses ------------------------------------------------------
     def part_img(self, rel):
@@ -423,13 +444,18 @@ class PackQA:
         return (f['a'] < 128) | (f['gray'] < P6_DARK_MAX) | (f['de_s'] > DE_SKIN)
 
     def _viol_hood_exposure(self, f, opening):
-        """face -> hood layers. Inside the opening: lining dE<=15, hair-white
+        """face -> hood layers. Inside the opening: lining dE<=15 OR the
+        hood's own interior shell white dE<=10 (the master paints white
+        fabric in the opening's upper half — the round-6 D1 defect was AMBER
+        bands there, not white). Hair-white LINE COPIES (side-hair shapes)
         and ink are violations. Outside: hood white dE<=10 or the hood's own
         (dome/hem) master ink."""
         inside = opening
         lining_ok = f['de_l'] <= DE_LINING
+        inner_white_ok = f['de_w'] <= DE_WHITE
         hairwhite = (f['lab'][..., 0] > P6_HAIRCUT_L * 2.55) & (f['chroma'] < P6_HAIRCUT_C)
-        in_viol = (f['a'] < 128) | ~lining_ok | hairwhite | (f['ink'] & ~self.hood_ink_ok)
+        in_viol = (f['a'] < 128) | ~(lining_ok | inner_white_ok) \
+            | (f['ink'] & ~self.hood_ink_ok)
         out_viol = (f['a'] < 128) | ((f['de_w'] > DE_WHITE) & ~(f['ink'] & self.hood_ink_ok))
         return np.where(inside, in_viol, out_viol).astype(bool)
 
@@ -709,8 +735,12 @@ class PackQA:
             hsv = cv2.cvtColor(hood[..., :3], cv2.COLOR_RGB2HSV).astype(np.float32)
             hue_deg = hsv[..., 0] * 2.0
             sat = hsv[..., 1] / 255.0
+            val = hsv[..., 2] / 255.0
+            # the outline ink is dark brown (hue 15-50, sat high, VALUE 0.16)
+            # — amber is the bright lining/ear colour, so a value floor keeps
+            # the restored dome ink out of the violation set
             amber = ((hue_deg >= P6_AMBER_HUE[0]) & (hue_deg <= P6_AMBER_HUE[1])
-                     & (sat > P6_AMBER_SAT) & h_a)
+                     & (sat > P6_AMBER_SAT) & (val > P6_AMBER_VAL_MIN) & h_a)
             ear_cov = np.zeros((H, W), bool)
             horn_cov = np.zeros((H, W), bool)
             for pid, acc in (('ear-L', ear_cov), ('ear-R', ear_cov),
@@ -726,8 +756,20 @@ class PackQA:
             opening = np.array(Image.open(QA / 'hood-opening.png').convert('L')) > 127 \
                 if (QA / 'hood-opening.png').exists() else np.zeros((H, W), bool)
             hairwhite = ((L8 > P6_HAIRCUT_L * 2.55) & (chroma < P6_HAIRCUT_C) & h_a)
-            hw_open = int((hairwhite & opening).sum())
-            mark('hood-hairwhite-opening', hood, hairwhite & opening)
+            # R7-2.4 targets the SIDE-HAIR COPIES hiding under the face
+            # stack — the master's own white hood interior visible at rest
+            # (upper half of the opening) is legitimate content and lives
+            # outside any cover, so the check runs on the covered band only.
+            cover_p = np.zeros((H, W), bool)
+            for pid in ('face', 'bangs', 'eye-L', 'eye-R', 'iris-L', 'iris-R',
+                        'mouth', 'third-eye'):
+                p = ext / f'{pid}.png'
+                if p.exists():
+                    cover_p |= load(p)[..., 3] > 200
+            hw_open = int((hairwhite & opening & cover_p
+                           & (np.arange(H)[:, None] >= 262)).sum())
+            mark('hood-hairwhite-opening', hood,
+                 hairwhite & opening & cover_p & (np.arange(H)[:, None] >= 262))
             strict_amber = (lab[..., 1] > 135) & (lab[..., 2] > 170) & h_a
             # post-split the BACK layer owns no visible-at-rest artwork, so
             # the lining-outside check runs on its whole domain; on the
@@ -749,8 +791,9 @@ class PackQA:
                 fhsv = cv2.cvtColor(front[..., :3], cv2.COLOR_RGB2HSV).astype(np.float32)
                 fhue = fhsv[..., 0] * 2.0
                 fsat = fhsv[..., 1] / 255.0
+                fval = fhsv[..., 2] / 255.0
                 famber = ((fhue >= P6_AMBER_HUE[0]) & (fhue <= P6_AMBER_HUE[1])
-                          & (fsat > P6_AMBER_SAT) & f_a)
+                          & (fsat > P6_AMBER_SAT) & (fval > P6_AMBER_VAL_MIN) & f_a)
                 famber_cov = int((famber & (ear_cov | horn_cov)).sum())
                 mark('hood-front-amber-coverage', front, famber & (ear_cov | horn_cov))
                 lines.append(f'P6 hood-front: amber-in-ear/horn-coverage={famber_cov} (gate 0)')

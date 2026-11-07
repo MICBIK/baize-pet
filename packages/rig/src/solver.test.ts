@@ -137,6 +137,9 @@ describe('solve()', () => {
     const arm = waving.find((s) => s.id === 'arm-L')
     expect(arm?.image).toBe('parts/arm-R.wave.png')
     expect(arm?.mirrored).toBe(true)
+    // R7-1: a raised arm renders above the hood-front shell (85) and the
+    // horns/third-eye sewn onto it (86/87) — z 89.
+    expect(arm?.z).toBe(89)
   })
 
   it('does not mirror a viewer-left arm that ships its own image', () => {

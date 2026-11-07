@@ -238,11 +238,12 @@ export function solve(manifest: RigManifest, params: RigParams): SolvedPart[] {
         image = slot.image
         px = slot.x
         py = slot.y
-        // Raised-arm slots render above the hood (60) and face (66): the
-        // wave hand sits in front of the hood, chin/cover sleeves cover the
-        // lower face. The down slot keeps the part's original z.
+        // Raised-arm slots render above the hood-front shell (85) — and the
+        // horns (86) / third eye (87) sewn onto it — so the wave hand sits
+        // in front of the whole head stack. The down slot keeps the part's
+        // original z.
         if (slotName !== 'down' && (part.id === 'arm-L' || part.id === 'arm-R')) {
-          z = 68
+          z = 89
         }
       }
     }
