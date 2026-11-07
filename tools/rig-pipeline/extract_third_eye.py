@@ -239,6 +239,13 @@ def main():
         patch = moved[c:d, a:b].copy()
         patch = recolor_to_amber(patch, amber)
         patch[..., 3] = np.minimum(alpha[c:d, a:b], moved[c:d, a:b, 3]).astype(np.uint8)
+        # R7-4.1, same rule as the closed-eye part: the alpha stops at the
+        # eye outline's outer edge with at most a 2 px AA transition — any
+        # halo / dashed speck further out loses its alpha.
+        from scipy import ndimage as _ndi
+        te_contour = _ndi.binary_fill_holes(patch[..., 3] > 128)
+        te_dist = cv2.distanceTransform((~te_contour).astype(np.uint8), cv2.DIST_L2, 3)
+        patch[..., 3][(~te_contour) & (te_dist > 2)] = 0
         print(f'third-eye-{shape}: shift ({dx:+.0f},{dy:+.0f}) px, almond {box}')
         out = OUT / f'third-eye-{shape}.png'
         # PIL save: load_rgba above is RGB-ordered; cv2.imwrite would swap

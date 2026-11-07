@@ -142,8 +142,68 @@
    "id": "hood",
    "image": "parts/hood.png",
    "x": 174,
-   "y": 96,
+   "y": 84,
    "z": 50,
+   "parent": "head",
+   "pivot": [
+    436,
+    294
+   ]
+  },
+  {
+   "id": "ear-L",
+   "image": "parts/ear-L.png",
+   "x": 172,
+   "y": 134,
+   "z": 55,
+   "parent": "head",
+   "pivot": [
+    254,
+    216
+   ]
+  },
+  {
+   "id": "ear-R",
+   "image": "parts/ear-R.png",
+   "x": 554,
+   "y": 134,
+   "z": 55,
+   "parent": "head",
+   "pivot": [
+    627,
+    218
+   ]
+  },
+  {
+   "id": "face",
+   "image": "parts/face.png",
+   "x": 256,
+   "y": 228,
+   "z": 60,
+   "parent": "head",
+   "pivot": [
+    434,
+    372
+   ]
+  },
+  {
+   "id": "bangs",
+   "image": "parts/bangs.png",
+   "x": 296,
+   "y": 222,
+   "z": 80,
+   "parent": "head",
+   "pivot": [
+    432,
+    308
+   ]
+  },
+  {
+   "id": "hood-front",
+   "image": "parts/hood-front.png",
+   "x": 174,
+   "y": 96,
+   "z": 85,
    "parent": "head",
    "pivot": [
     436,
@@ -155,47 +215,23 @@
    "image": "parts/horn-L.png",
    "x": 300,
    "y": 84,
-   "z": 52,
+   "z": 86,
    "parent": "head",
    "pivot": [
-    340,
-    139
+    339,
+    138
    ]
   },
   {
    "id": "horn-R",
    "image": "parts/horn-R.png",
-   "x": 496,
+   "x": 498,
    "y": 84,
-   "z": 52,
+   "z": 86,
    "parent": "head",
    "pivot": [
     542,
-    139
-   ]
-  },
-  {
-   "id": "ear-L",
-   "image": "parts/ear-L.png",
-   "x": 172,
-   "y": 134,
-   "z": 55,
-   "parent": "head",
-   "pivot": [
-    250,
-    212
-   ]
-  },
-  {
-   "id": "ear-R",
-   "image": "parts/ear-R.png",
-   "x": 562,
-   "y": 134,
-   "z": 55,
-   "parent": "head",
-   "pivot": [
-    631,
-    215
+    138
    ]
   },
   {
@@ -203,7 +239,7 @@
    "image": "parts/third-eye.png",
    "x": 370,
    "y": 134,
-   "z": 56,
+   "z": 87,
    "parent": "head",
    "pivot": [
     438,
@@ -226,30 +262,6 @@
      "y": 137
     }
    }
-  },
-  {
-   "id": "face",
-   "image": "parts/face.png",
-   "x": 270,
-   "y": 240,
-   "z": 60,
-   "parent": "head",
-   "pivot": [
-    436,
-    371
-   ]
-  },
-  {
-   "id": "bangs",
-   "image": "parts/bangs.png",
-   "x": 296,
-   "y": 224,
-   "z": 80,
-   "parent": "head",
-   "pivot": [
-    432,
-    309
-   ]
   },
   {
    "id": "eye-L",
@@ -618,7 +630,7 @@
    "image": "parts/third-eye-glow.png",
    "x": 374,
    "y": 94,
-   "z": 57,
+   "z": 88,
    "parent": "head",
    "pivot": [
     438,

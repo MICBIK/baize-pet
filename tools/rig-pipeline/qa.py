@@ -24,12 +24,14 @@ QA.mkdir(parents=True, exist_ok=True)
 PACK = ROOT / 'characters/baize-b3'  # exported pack: pivots, slots, clips
 PARTS = ART / 'parts-ext' if (ART / 'parts-ext').exists() else ART / 'parts-full'
 
-# Draw order (z, id) matching export PART_META.
+# Draw order (z, id) matching export PART_META (R7-1: hood split into the
+# back layer at z50 and the visible front shell at z85; horns/third-eye ride
+# the front).
 ZORDER = [
     'tail', 'leg-L', 'leg-R', 'shorts', 'torso', 'string-L', 'string-R',
-    'arm-L', 'arm-R', 'hood', 'horn-L', 'horn-R', 'ear-L', 'ear-R',
-    'third-eye', 'face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth',
-    'blush', 'bangs',
+    'arm-L', 'arm-R', 'hood', 'ear-L', 'ear-R', 'face', 'eye-L', 'eye-R',
+    'iris-L', 'iris-R', 'mouth', 'blush', 'bangs', 'hood-front',
+    'horn-L', 'horn-R', 'third-eye',
 ]
 
 # Round-2 gates (rework task book section 4).
@@ -61,6 +63,19 @@ HOSTS = {
     # shell rings sit under the ears' leftover pixels (static horn, swinging
     # ear) — both are design overlaps policed by the removal gate.
     'hood': {'torso'},
+    # R7-1: hood-front is the visible half of the hood's own territory. The
+    # face/bangs transition bands (18 px under the rim, task book R7-1.3),
+    # the ear root bands (15 px), the horn rings (10 px) and the third-eye's
+    # riding ink deliberately overlap it (衔接带); the drape half overlaps
+    # the torso collar fill exactly like `hood`. hood~hood-front stays
+    # NON-exempt: the two layers' pixels are mutually exclusive.
+    'hood-front': {'torso', 'face', 'bangs', 'ear-L', 'ear-R',
+                   'horn-L', 'horn-R', 'third-eye'},
+    'ear-L': {'hood', 'hood-front'}, 'ear-R': {'hood', 'hood-front'},
+    'horn-L': {'hood', 'hood-front', 'ear-L'},
+    'horn-R': {'hood', 'hood-front', 'ear-R'},
+    'bangs': {'face', 'hood', 'hood-front'},
+    'third-eye': {'hood', 'hood-front'},
 }
 # Parallax completion band: P0-1 requires the hood to carry amber lining
 # under the whole face opening (head turn reveals it). Overlap of hood with
@@ -80,7 +95,8 @@ SEAM_ANG_TOL = 6     # degrees around horizontal / vertical
 SEAM_KX = 368 * 0.06
 SEAM_KY = 300 * 0.04
 SEAM_FAC = {
-    'hood': -0.35, 'ear-L': -0.45, 'ear-R': -0.45, 'face': 0.4,
+    'hood': -0.35, 'hood-front': -0.35, 'ear-L': -0.45, 'ear-R': -0.45,
+    'face': 0.4,
     # round 5: horns ride the hood's parallax (solver.ts FAC.horn)
     'horn-L': -0.35, 'horn-R': -0.35,
     'eye-L': 1.0, 'eye-R': 1.0, 'iris-L': 1.0, 'iris-R': 1.0,
@@ -99,8 +115,8 @@ JOINTS = {
     'body.lean': (-12, 12, 'all'),
 }
 HEAD_GROUP = {
-    'hood', 'horn-L', 'horn-R', 'ear-L', 'ear-R', 'third-eye', 'face',
-    'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'bangs', 'blush',
+    'hood', 'hood-front', 'horn-L', 'horn-R', 'ear-L', 'ear-R', 'third-eye',
+    'face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'bangs', 'blush',
 }
 
 
@@ -254,12 +270,20 @@ def exclusivity(parts, master):
     hood lining under the face opening, is design — the lining pixels must be
     amber (verified below), otherwise it is a hidden copy and still a defect."""
     seam = _seam_mask(master.shape)
-    fm = np.zeros(master.shape[:2], np.uint8)
-    cv2.fillPoly(fm, [np.array(FACE_OPEN, np.int32)], 1)
-    # Rim zone: the opening polygon widened 30 px. Hood↔face-stack overlaps
-    # here are design (lining/shell under the stack, the fringe fill over
-    # the shell) and are colour-checked instead of area-counted.
-    fm = cv2.dilate(fm, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61)))
+    # Rim zone: the HOOD OPENING (round 7: the ink-bounded mask the split
+    # pipeline saves — the round-6 polygon overshoots the true rim, so the
+    # face stack's overlap with the hood back there is real design overlap
+    # and must be colour-checked, not area-counted). Fallback: the polygon
+    # widened 30 px.
+    opening_path = QA / 'hood-opening.png'
+    if opening_path.exists():
+        base = np.array(Image.open(opening_path).convert('L')) > 127
+    else:
+        base = np.zeros(master.shape[:2], np.uint8)
+        cv2.fillPoly(base, [np.array(FACE_OPEN, np.int32)], 1)
+        base = base.astype(bool)
+    fm = cv2.dilate(base.astype(np.uint8),
+                    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
     face_open = fm.astype(bool)
     lab = cv2.cvtColor(master[..., :3], cv2.COLOR_RGB2LAB)
     hh = np.zeros(master.shape[:2], bool)
@@ -271,6 +295,15 @@ def exclusivity(parts, master):
     # (the rim fade zone) — a hidden face copy is neither lining nor shell.
     shell_rgb = np.array((249, 243, 240), float)
     shell_lab = cv2.cvtColor(shell_rgb.reshape(1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)[0, 0].astype(float)
+    # Round 7: the back layer also carries the face-stack's SKIN under the
+    # slot footprints (rule-B content that shows when a patch slides) and
+    # the master's own white fabric inside the opening's upper half — both
+    # legitimate; a hidden copy of EYE/MOUTH/HAIR artwork is not.
+    skin_sel_m = ((lab[..., 2].astype(int) >= 133) & (lab[..., 0].astype(int) >= 185)
+                  & (master[..., 3] > 128))
+    skin_rgb = np.median(master[..., :3][skin_sel_m], axis=0).astype(float) \
+        if skin_sel_m.any() else np.array((248, 229, 215), float)
+    skin_lab = cv2.cvtColor(skin_rgb.reshape(1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2LAB)[0, 0].astype(float)
 
     alphas = {n: p[..., 3] > 128 for n, p in parts.items()}
     areas = {n: int(a.sum()) for n, a in alphas.items()}
@@ -293,7 +326,9 @@ def exclusivity(parts, master):
             inter = alphas[a] & alphas[b]
             inter &= ~seam
             band = np.zeros(master.shape[:2], bool)
-            if a == 'hood' and b in ('face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth', 'blush', 'bangs'):
+            if a in ('hood', 'hood-front') and b in (
+                    'face', 'eye-L', 'eye-R', 'iris-L', 'iris-R', 'mouth',
+                    'blush', 'bangs'):
                 band = face_open & inter
             inter &= ~band
             px = int(inter.sum())
@@ -304,7 +339,8 @@ def exclusivity(parts, master):
                 ).reshape(-1, 3).astype(float)
                 de_l = np.sqrt(((px_lab - lining_lab) ** 2).sum(axis=1))
                 de_s = np.sqrt(((px_lab - shell_lab) ** 2).sum(axis=1))
-                bad_band = int(((de_l > 50) & (de_s > 25)).sum())
+                de_k = np.sqrt(((px_lab - skin_lab) ** 2).sum(axis=1))
+                bad_band = int(((de_l > 50) & (de_s > 25) & (de_k > 25)).sum())
             if px == 0 and bad_band == 0:
                 continue
             ratio = max(px, bad_band) / max(1, min(areas[a], areas[b]))
@@ -374,7 +410,8 @@ def head_motion(parts, master):
                     rot[n] = (deg, neck)
         if 'head.turnX' in params:
             k = params['head.turnX'] * 0.06 * 300  # head width 6% in px (~300)
-            for n, f in (('hood', -0.35), ('ear-L', -0.45), ('ear-R', -0.45),
+            for n, f in (('hood', -0.35), ('hood-front', -0.35),
+                         ('ear-L', -0.45), ('ear-R', -0.45),
                          ('face', 0.4), ('eye-L', 1.0), ('eye-R', 1.0),
                          ('iris-L', 1.0), ('iris-R', 1.0), ('mouth', 1.0),
                          ('bangs', 1.0), ('third-eye', 0.6)):
@@ -382,9 +419,9 @@ def head_motion(parts, master):
                     off[n] = (k * f, 0)
         if 'head.turnY' in params:
             k = params['head.turnY'] * 0.04 * 380
-            for n, f in (('hood', 0.3), ('face', 1.0), ('eye-L', 1.0),
-                         ('eye-R', 1.0), ('iris-L', 1.0), ('iris-R', 1.0),
-                         ('mouth', 1.0), ('bangs', 1.0)):
+            for n, f in (('hood', 0.3), ('hood-front', 0.3), ('face', 1.0),
+                         ('eye-L', 1.0), ('eye-R', 1.0), ('iris-L', 1.0),
+                         ('iris-R', 1.0), ('mouth', 1.0), ('bangs', 1.0)):
                 if n in parts:
                     off[n] = (0, k * f)
         cells.append((label, composite_shift(parts, rot, off, sc)))
