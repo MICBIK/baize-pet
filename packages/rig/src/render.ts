@@ -79,24 +79,17 @@ export function drawRigFrame(
 
     const w = img.naturalWidth * k
     const h = img.naturalHeight * k
-    if (sp.mirrored) {
+    // Iris: shifted inside the eye-white mask, drawn under the part's own
+    // transform so it follows head tilt / parallax / breath like the eye.
+    const irisMask = sp.irisShift && sp.clipImage ? images.get(sp.clipImage) : undefined
+    if (irisMask) {
+      drawIrisClipped(ctx, img, irisMask, sp, k)
+    } else if (sp.mirrored) {
       ctx.translate(sp.restX + w / 2, sp.restY + h / 2)
       ctx.scale(-1, 1)
       ctx.drawImage(img, -w / 2, -h / 2, w, h)
     } else {
       ctx.drawImage(img, sp.restX, sp.restY, w, h)
-    }
-
-    // Iris: shift inside the eye-white mask (source-in clip via scratch).
-    if (sp.irisShift && sp.clipImage) {
-      const mask = images.get(sp.clipImage)
-      if (mask) {
-        ctx.restore()
-        ctx.save()
-        drawIrisClipped(ctx, img, mask, sp, k)
-        ctx.restore()
-        continue
-      }
     }
     ctx.restore()
   }
@@ -104,7 +97,11 @@ export function drawRigFrame(
   if (opts.showPivots) drawPivotOverlay(ctx, manifest, parts, dpr, sizeCss)
 }
 
-/** One-frame iris composite: iris shifted, masked by the eye-white alpha. */
+/**
+ * One-frame iris composite: the iris shifted by irisShift, clipped to the
+ * eye-white mask that stays put. Draws in the caller's current transform
+ * (the iris part's pose), so the result moves with the head.
+ */
 function drawIrisClipped(
   ctx: CanvasRenderingContext2D,
   iris: RigPaintable,
@@ -115,16 +112,17 @@ function drawIrisClipped(
   const scratch = irisScratch(iris.naturalWidth, iris.naturalHeight)
   const sctx = scratch.getContext('2d')
   if (!sctx) return
+  const shiftX = sp.irisShift?.dx ?? 0
+  const shiftY = sp.irisShift?.dy ?? 0
   sctx.clearRect(0, 0, scratch.width, scratch.height)
   sctx.drawImage(iris, 0, 0)
-  sctx.globalCompositeOperation = 'source-in'
-  // clipRest is the mask's master-px rest; sp.rest is the iris's. Their
-  // difference in pack px aligns the mask over the iris inside the scratch.
-  const maskX = ((sp.clipRestX ?? sp.restX) - sp.restX) / k
-  const maskY = ((sp.clipRestY ?? sp.restY) - sp.restY) / k
-  sctx.drawImage(mask, maskX, maskY)
+  // Keep the iris only where the eye white is. The mask is fixed in master
+  // space while the iris moves, so offset it by the shift (pack px).
+  sctx.globalCompositeOperation = 'destination-in'
+  const maskX = ((sp.clipRestX ?? sp.restX) - (sp.restX + shiftX)) / k
+  const maskY = ((sp.clipRestY ?? sp.restY) - (sp.restY + shiftY)) / k
+  sctx.drawImage(eyeOpening(mask), maskX, maskY)
   sctx.globalCompositeOperation = 'source-over'
-  // Scratch is in pack px (iris + mask share that space); scale back up here.
   const w = iris.naturalWidth * k
   const h = iris.naturalHeight * k
   ctx.drawImage(
@@ -133,11 +131,72 @@ function drawIrisClipped(
     0,
     iris.naturalWidth,
     iris.naturalHeight,
-    sp.restX + (sp.irisShift?.dx ?? 0),
-    sp.restY + (sp.irisShift?.dy ?? 0),
+    sp.restX + shiftX,
+    sp.restY + shiftY,
     w,
     h,
   )
+}
+
+const OPENINGS = new WeakMap<RigPaintable, CanvasImageSource>()
+
+/**
+ * The eye-white image has a transparent hole where the iris sits (the iris
+ * is its own part). Clip with the whole eye opening instead: the white's
+ * alpha with every enclosed hole filled. Cached per image; falls back to the
+ * raw white when pixels cannot be read.
+ */
+function eyeOpening(mask: RigPaintable): CanvasImageSource {
+  const hit = OPENINGS.get(mask)
+  if (hit) return hit
+  let out: CanvasImageSource = mask
+  try {
+    const w = mask.naturalWidth
+    const h = mask.naturalHeight
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = h
+    const cx = c.getContext('2d')
+    if (cx && w > 0 && h > 0) {
+      cx.drawImage(mask, 0, 0)
+      const data = cx.getImageData(0, 0, w, h)
+      const px = data.data
+      // Flood the outside (transparent pixels reachable from the border).
+      const outside = new Uint8Array(w * h)
+      const stack: number[] = []
+      const push = (i: number) => {
+        if (!outside[i] && (px[i * 4 + 3] ?? 0) < 128) {
+          outside[i] = 1
+          stack.push(i)
+        }
+      }
+      for (let x = 0; x < w; x++) {
+        push(x)
+        push((h - 1) * w + x)
+      }
+      for (let y = 0; y < h; y++) {
+        push(y * w)
+        push(y * w + w - 1)
+      }
+      while (stack.length > 0) {
+        const i = stack.pop() as number
+        const x = i % w
+        if (x > 0) push(i - 1)
+        if (x < w - 1) push(i + 1)
+        if (i >= w) push(i - w)
+        if (i < w * (h - 1)) push(i + w)
+      }
+      for (let i = 0; i < w * h; i++) {
+        if (!outside[i]) px[i * 4 + 3] = 255
+      }
+      cx.putImageData(data, 0, 0)
+      out = c
+    }
+  } catch {
+    out = mask
+  }
+  OPENINGS.set(mask, out)
+  return out
 }
 
 let SCRATCH: HTMLCanvasElement | null = null
