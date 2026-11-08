@@ -1,0 +1,102 @@
+{
+ "name": "wake-up",
+ "duration": 2200,
+ "loop": false,
+ "layer": "action",
+ "expression": "happy",
+ "tracks": {
+  "eye.L.open": [
+   [
+    0,
+    0.2
+   ],
+   [
+    300,
+    0.8,
+    "easeOutSine"
+   ],
+   [
+    600,
+    0.2,
+    "easeInOutSine"
+   ],
+   [
+    900,
+    1,
+    "easeOutSine"
+   ]
+  ],
+  "eye.R.open": [
+   [
+    0,
+    0.2
+   ],
+   [
+    300,
+    0.8,
+    "easeOutSine"
+   ],
+   [
+    600,
+    0.2,
+    "easeInOutSine"
+   ],
+   [
+    900,
+    1,
+    "easeOutSine"
+   ]
+  ],
+  "arm.L.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    1400,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    1400,
+    "down"
+   ]
+  ],
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    800,
+    -0.25,
+    "easeOutSine"
+   ],
+   [
+    1400,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "body.y": [
+   [
+    0,
+    0
+   ],
+   [
+    800,
+    -6,
+    "easeOutSine"
+   ],
+   [
+    1400,
+    0
+   ]
+  ]
+ }
+}

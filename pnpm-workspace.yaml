@@ -1,6 +1,7 @@
 packages:
   - apps/desktop
   - packages/*
+  - tools/*
 
 # pnpm 9.15+ strips dependency build scripts by default; these native/download
 # packages need theirs to function (electron downloads its binary, esbuild

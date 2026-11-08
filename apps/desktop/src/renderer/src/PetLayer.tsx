@@ -2,39 +2,17 @@
 
 import type { CharacterInfo, PetActionName } from '@baize/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { alphaAt, HIT_ALPHA_THRESHOLD, makeScratchCanvas } from './pet/hitTest'
+import { RigPlayer } from './pet/RigPlayer'
+import { containRect } from './pet/VideoPlayer'
 
-const HIT_ALPHA_THRESHOLD = 32
 const DRAG_THRESHOLD_PX = 5
 const BUBBLE_MS = 4000
 
-function animationUrl(info: CharacterInfo, action: PetActionName): string {
-  const file = info.animations[action] ?? info.animations.idle
-  if (!file) return ''
-  return `baize-character://${info.id}/${file}`
-}
-
-/** The video's drawn area inside the element (object-fit: contain letterboxing removed). */
-function containRect(video: HTMLVideoElement): {
-  left: number
-  top: number
-  width: number
-  height: number
-} {
-  const rect = video.getBoundingClientRect()
-  const scale = Math.min(rect.width / video.videoWidth, rect.height / video.videoHeight)
-  const width = video.videoWidth * scale
-  const height = video.videoHeight * scale
-  return {
-    left: rect.left + (rect.width - width) / 2,
-    top: rect.top + (rect.height - height) / 2,
-    width,
-    height,
-  }
-}
-
 /**
- * The pet layer: plays the current action's animation, runs the per-pixel alpha
- * hit test that toggles window click-through, and drives window dragging.
+ * The pet layer: picks the renderer from the pack manifest (video webm or
+ * layered rig), runs the per-pixel alpha hit test that toggles window
+ * click-through, and drives window dragging and the speech bubble.
  */
 export function PetLayer() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -44,6 +22,8 @@ export function PetLayer() {
   const [character, setCharacter] = useState<CharacterInfo | null>(null)
   const [action, setAction] = useState<PetActionName>('idle')
   const [bubble, setBubble] = useState<string | null>(null)
+  const [say, setSay] = useState<{ line: string; seq: number } | null>(null)
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -54,12 +34,15 @@ export function PetLayer() {
     const offAction = window.baize.onPetAction((spontaneous: string) => setAction(spontaneous))
     const offSay = window.baize.onSay((line: string) => {
       setBubble(line)
+      setSay((prev) => ({ line, seq: (prev?.seq ?? 0) + 1 }))
       if (bubbleTimer.current) clearTimeout(bubbleTimer.current)
       bubbleTimer.current = setTimeout(() => setBubble(null), BUBBLE_MS)
     })
+    const offCursor = window.baize.onCursor((point: { x: number; y: number }) => setCursor(point))
     return () => {
       offAction()
       offSay()
+      offCursor()
       if (bubbleTimer.current) clearTimeout(bubbleTimer.current)
     }
   }, [])
@@ -72,44 +55,70 @@ export function PetLayer() {
   }, [])
 
   /**
-   * Alpha hit test against the current video frame. If pixel readback fails
-   * (e.g. a tainted canvas), the drawn bounding box is used as the fallback so
-   * the pet can never become fully unclickable.
+   * Alpha hit test against the visible canvas (rig) or the current video
+   * frame. If pixel readback fails (e.g. a tainted canvas), the drawn
+   * bounding box is the fallback so the pet never becomes unclickable.
    */
   const hitTest = useCallback(
     (clientX: number, clientY: number) => {
+      if (character?.renderer === 'rig') {
+        const canvas = canvasRef.current
+        if (!canvas || canvas.width === 0) return
+        const rect = canvas.getBoundingClientRect()
+        const insideBox =
+          clientX >= rect.left &&
+          clientX < rect.left + rect.width &&
+          clientY >= rect.top &&
+          clientY < rect.top + rect.height
+        if (!insideBox) {
+          setInteractive(false)
+          return
+        }
+        try {
+          const dpr = window.devicePixelRatio || 1
+          const ctx = canvas.getContext('2d', { willReadFrequently: true })
+          if (!ctx) throw new Error('no 2d context')
+          const x = Math.floor((clientX - rect.left) * dpr)
+          const y = Math.floor((clientY - rect.top) * dpr)
+          const d = ctx.getImageData(x, y, 1, 1).data
+          setInteractive((d[3] ?? 0) > HIT_ALPHA_THRESHOLD)
+        } catch {
+          setInteractive(true)
+        }
+        return
+      }
       const video = videoRef.current
       if (!video || video.readyState < 2 || video.videoWidth === 0) return
       const rect = containRect(video)
       const insideBox =
         clientX >= rect.left &&
-        clientX < rect.left + rect.width &&
+        clientX < rect.left + rect.workW &&
         clientY >= rect.top &&
-        clientY < rect.top + rect.height
+        clientY < rect.top + rect.workH
       if (!insideBox) {
         setInteractive(false)
         return
       }
       try {
-        if (!canvasRef.current) canvasRef.current = document.createElement('canvas')
-        const canvas = canvasRef.current
-        if (canvas.width !== video.videoWidth) {
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
+        if (!canvasRef.current) canvasRef.current = makeScratchCanvas(256)
+        const scratch = canvasRef.current
+        if (scratch.width !== video.videoWidth) {
+          scratch.width = video.videoWidth
+          scratch.height = video.videoHeight
         }
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })
-        if (!ctx) throw new Error('canvas 2d context unavailable')
-        const scale = video.videoWidth / rect.width
-        const x = Math.floor((clientX - rect.left) * scale)
-        const y = Math.floor((clientY - rect.top) * scale)
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const alpha = ctx.getImageData(x, y, 1, 1).data[3] ?? 0
+        const alpha = alphaAt(
+          scratch,
+          (ctx) => ctx.drawImage(video, 0, 0, scratch.width, scratch.height),
+          rect,
+          clientX,
+          clientY,
+        )
         setInteractive(alpha > HIT_ALPHA_THRESHOLD)
       } catch {
         setInteractive(true)
       }
     },
-    [setInteractive],
+    [character, setInteractive],
   )
 
   const onPointerMove = useCallback(
@@ -146,20 +155,29 @@ export function PetLayer() {
       setAction('click')
       window.baize.click()
     } else {
-      setAction('idle')
+      // Dropped after a drag: play the landing squash (falls back to idle).
+      setAction('land')
     }
   }, [])
 
   const onEnded = useCallback(() => {
-    // One-shot actions (click) return to idle; loops never end.
-    setAction('idle')
-  }, [])
+    // One-shot actions return to idle, except the sleep chain: falling asleep
+    // keeps sleeping (loops until the next interaction).
+    setAction((prev) =>
+      prev === 'fall-asleep' && character && 'sleep' in character.animations ? 'sleep' : 'idle',
+    )
+  }, [character])
 
   if (!character) {
     return null
   }
 
-  const looping = action === 'idle' || action === 'drag' || !(action in character.animations)
+  const looping =
+    action === 'idle' ||
+    action === 'drag' ||
+    action === 'sleep' ||
+    !(action in character.animations)
+  const isRig = character.renderer === 'rig'
 
   return (
     <div
@@ -168,16 +186,26 @@ export function PetLayer() {
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
-      <video
-        ref={videoRef}
-        src={animationUrl(character, action)}
-        crossOrigin="anonymous"
-        autoPlay
-        loop={looping}
-        muted
-        onEnded={onEnded}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-      />
+      {isRig ? (
+        <>
+          <RigPlayer info={character} action={action} say={say} cursor={cursor} />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </>
+      ) : (
+        <video
+          ref={videoRef}
+          src={(() => {
+            const file = character.animations[action] ?? character.animations.idle
+            return file ? `baize-character://${character.id}/${file}` : ''
+          })()}
+          crossOrigin="anonymous"
+          autoPlay
+          loop={looping}
+          muted
+          onEnded={onEnded}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+        />
+      )}
       {bubble && (
         <div
           style={{

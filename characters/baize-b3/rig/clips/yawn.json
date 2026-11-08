@@ -1,0 +1,91 @@
+{
+ "name": "yawn",
+ "duration": 2400,
+ "loop": false,
+ "layer": "action",
+ "expression": "sleepy",
+ "next": "fall-asleep",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    1600,
+    "up"
+   ],
+   [
+    2000,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "up"
+   ],
+   [
+    1600,
+    "rub"
+   ],
+   [
+    2400,
+    "down"
+   ]
+  ],
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    500,
+    -0.2,
+    "easeOutSine"
+   ],
+   [
+    1600,
+    -0.1
+   ],
+   [
+    2400,
+    0
+   ]
+  ],
+  "mouth.shape": [
+   [
+    0,
+    "small"
+   ],
+   [
+    300,
+    "wide"
+   ],
+   [
+    1500,
+    "small"
+   ],
+   [
+    1900,
+    "smile"
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "squeeze"
+   ],
+   [
+    1700,
+    "auto"
+   ]
+  ]
+ },
+ "events": [
+  [
+   600,
+   "fx:tear"
+  ]
+ ]
+}

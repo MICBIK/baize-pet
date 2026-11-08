@@ -1,0 +1,664 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Export the rig character pack (task book A8/E): parts at half master
+scale into characters/baize-b3/rig/parts, rig.json with offsets and the
+measured anchor, behaviour data copied from characters/b3, sprite sheets,
+LICENSE and README.
+"""
+import os
+import json
+import shutil
+from pathlib import Path
+
+import cv2
+import numpy as np
+from scipy import ndimage
+from PIL import Image
+
+# BAIZE_ROOT overrides the default checkout location (e.g. CI or a scratch copy)
+ROOT = Path(os.environ.get('BAIZE_ROOT', '/Users/baihaibin/Documents/WorkSpares/BaiZe'))
+ART = ROOT / 'demo/rig-art'
+PACK = ROOT / 'characters/baize-b3'
+B3_MANIFEST = ROOT / 'characters/b3/manifest.json'
+SPRITES_V2 = ROOT / 'demo/pet-demo/b3-sprites-v2'
+SCALE = 0.5
+ARM_PIVOT_DROP = 24  # shoulder pivot: master px below the sleeve's top row
+
+# z / parent / pivot hints per part id (master px; refined from segmentation).
+PART_META = {
+    'tail':      {'z': 0,  'parent': 'body'},
+    'leg-L':     {'z': 10, 'parent': 'body'},
+    'leg-R':     {'z': 10, 'parent': 'body'},
+    'shorts':    {'z': 20, 'parent': 'body'},
+    'torso':     {'z': 30, 'parent': 'body'},
+    'string-L':  {'z': 35, 'parent': 'torso'},
+    'string-R':  {'z': 35, 'parent': 'torso'},
+    'arm-L':     {'z': 40, 'parent': 'torso', 'slot_key': 'arm.L.slot'},
+    'arm-R':     {'z': 40, 'parent': 'torso', 'slot_key': 'arm.R.slot'},
+    'hood':      {'z': 50, 'parent': 'head'},
+    'ear-L':     {'z': 55, 'parent': 'head'},
+    'ear-R':     {'z': 55, 'parent': 'head'},
+    'face':      {'z': 60, 'parent': 'head'},
+    'bangs':     {'z': 80, 'parent': 'head'},
+    # R7-1 z table: hood-front (the visible-at-rest shell) covers the face
+    # stack; horns are sewn on the front, the third eye rides above them.
+    'hood-front': {'z': 85, 'parent': 'head'},
+    'horn-L':    {'z': 86, 'parent': 'head'},
+    'horn-R':    {'z': 86, 'parent': 'head'},
+    'third-eye': {'z': 87, 'parent': 'head'},
+    'eye-L':     {'z': 70, 'parent': 'head', 'slot_key': 'eye.shape'},
+    'eye-R':     {'z': 70, 'parent': 'head', 'slot_key': 'eye.shape'},
+    'iris-L':    {'z': 71, 'parent': 'head'},
+    'iris-R':    {'z': 71, 'parent': 'head'},
+    'mouth':     {'z': 72, 'parent': 'head', 'slot_key': 'mouth.shape'},
+    'blush':     {'z': 73, 'parent': 'head', 'opacityParam': 'blush'},
+    # A7 effect sprites (gen_fx.py): opacity driven by the fx.<name> param.
+    'fx-sweat':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.sweat'},
+    'fx-tear':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.tear'},
+    'fx-zzz':     {'z': 90, 'parent': 'head', 'opacityParam': 'fx.zzz'},
+    'fx-question': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.question'},
+    'fx-exclaim': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.exclaim'},
+    'fx-note':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.note'},
+    'fx-heart':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.heart'},
+    'fx-sparkle': {'z': 90, 'parent': 'head', 'opacityParam': 'fx.sparkle'},
+    'fx-puff':    {'z': 90, 'parent': 'head', 'opacityParam': 'fx.puff'},
+    'fx-anger':   {'z': 90, 'parent': 'head', 'opacityParam': 'fx.anger'},
+    'fx-bubble':  {'z': 90, 'parent': 'head', 'opacityParam': 'fx.bubble'},
+    # A4 third-eye-glow: pure amber soft light under the fx stack, additive.
+    # R7-1: rides directly above the third-eye part (z 87 -> 88).
+    'third-eye-glow': {'z': 88, 'parent': 'head', 'opacityParam': 'thirdEye.glow', 'blend': 'lighter'},
+}
+
+
+def measure_anchor(master_rgba):
+    """Anchor measured with the SAME iterative top-band metric as the sprite
+    normalizer (build-sprites-2.py hood_width), so rig frames and sprite
+    frames share one ruler: hood width -> 92 display px, feet -> ground 246."""
+    alpha = master_rgba[..., 3] > 128
+    ys, xs = np.where(alpha)
+    ground_y = int(ys.max())
+    top = ys.min()
+    w = (xs.max() - xs.min() + 1) * 0.6
+    for _ in range(4):
+        band = alpha[top : top + max(4, int(w * 0.62))]
+        cols = np.where(band.any(0))[0]
+        w = cols.max() - cols.min() + 1
+    hood_w = float(w)
+    center_x = int((xs.min() + xs.max()) / 2)
+    return hood_w, ground_y, center_x
+
+
+def bbox_of(mask):
+    ys, xs = np.where(mask > 0)
+    if len(ys) == 0:
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+
+def clean_edge_halo(img):
+    """Round-3: clear the light semi-transparent specks outside the outer
+    opaque ring of a part (LANCZOS resampling spreads a 1px bright halo
+    past the artwork's outline; visible as scattered light dots on dark
+    backgrounds). Exterior = flood from the image border over non-opaque
+    pixels; semi-transparent AND bright pixels out there lose their alpha.
+    Dark anti-aliased fringes are the outline's own AA and stay."""
+    a = img[..., 3]
+    gray = cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2GRAY)
+    opaque = a >= 200
+    h, w = a.shape
+    ff = (~opaque).astype(np.uint8)
+    reach = np.zeros((h + 2, w + 2), np.uint8)
+    for x in range(w):
+        for y in (0, h - 1):
+            if ff[y, x] == 1 and reach[y + 1, x + 1] == 0:
+                cv2.floodFill(ff, reach, (x, y), 2)
+    for y in range(h):
+        for x in (0, w - 1):
+            if ff[y, x] == 1 and reach[y + 1, x + 1] == 0:
+                cv2.floodFill(ff, reach, (x, y), 2)
+    exterior = ff == 2
+    clear = exterior & (a < 200) & (gray > 150)
+    img[..., 3][clear] = 0
+    return int(clear.sum())
+
+
+# Round-5 face polish. Mouth patches are cut from registered variants with a
+# rectangular feathered mask, so they drag along whatever the variant had
+# around the mouth: white line fragments from the master outline (idle
+# "white rectangle"), and the chin / hood lining of a lower-sitting head
+# (mouth-cat's grey chin smudge). The face part already carries clean skin
+# under the mouth, so a mouth image only needs its own strokes.
+MOUTH_MIN_COMPONENT = 5   # master px; smaller ink islands are noise
+MOUTH_MIN_INK = 60        # master px of kept mouth ink a slot needs;
+                          # below it the patch is chin/lining debris only
+
+
+def fill_holes(mask):
+    """Fill the enclosed holes of a binary mask (uint8 0/1)."""
+    h, w = mask.shape
+    ff = np.pad(mask.astype(np.uint8), 1)
+    seed = np.zeros((h + 4, w + 4), np.uint8)
+    cv2.floodFill(ff, seed, (0, 0), 2)
+    out = mask.astype(np.uint8).copy()
+    out[ff[1:-1, 1:-1] == 0] = 1
+    return out
+
+
+def clean_mouth_patch(patch, ox, oy, face):
+    """Keep only the mouth strokes of a master-scale mouth image placed at
+    (ox, oy). Ink = pink/red interior, dark outline or brown line pixels that
+    sit over the face part's skin; light/grey/amber pixels never count. Ink
+    islands are closed, hole-filled (keeps tongue highlights), grown 1px and
+    feathered; everything else loses its alpha. Returns (patch, pink_px):
+    the kept ink that is mouth-interior pink (chin/lining debris is amber or
+    peach, hue 8-18, and never counts)."""
+    h, w = patch.shape[:2]
+    under = np.zeros((h, w, 4), np.int32)
+    fy0, fx0 = max(oy, 0), max(ox, 0)
+    fy1, fx1 = min(oy + h, face.shape[0]), min(ox + w, face.shape[1])
+    under[fy0 - oy:fy1 - oy, fx0 - ox:fx1 - ox] = face[fy0:fy1, fx0:fx1]
+    skin = fill_holes((under[..., 3] > 200) & (under[..., :3].min(-1) > 170))
+    valid = cv2.erode(skin, np.ones((5, 5), np.uint8)) > 0
+    hsv = cv2.cvtColor(np.ascontiguousarray(patch[..., :3]), cv2.COLOR_RGB2HSV).astype(np.int32)
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    pink = ((hue >= 150) | (hue <= 8)) & (sat > 45)
+    dark = val < 120
+    # brown line strokes (the idle smile fades to a light tan mid-stroke);
+    # saturated bright amber is hood lining, not a mouth
+    diff = np.abs(patch[..., :3].astype(np.int32) - under[..., :3]).max(-1)
+    brown = (hue <= 20) & (sat >= 45) & ~((sat > 150) & (val > 215)) & (val < 250) & (diff > 20)
+    ink = (patch[..., 3] > 100) & (pink | dark | brown) & valid
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    keep = np.zeros((h, w), np.uint8)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= MOUTH_MIN_COMPONENT:
+            keep[lab == i] = 1
+    rose = ((hue >= 150) | (hue <= 3)) & (sat > 45)
+    # kept ink = every stroke a slot carries (pink interior, dark outline,
+    # brown line) — MOUTH_MIN_INK polices mouth ink, not rose interior alone:
+    # the cat ω is a line mouth with no pink interior at all
+    ink_px = int(keep.astype(bool).sum())
+    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    keep = fill_holes(keep)
+    soft = cv2.dilate(keep, np.ones((3, 3), np.uint8)).astype(np.float32)
+    soft = cv2.GaussianBlur(soft, (5, 5), 1.0) * valid
+    out = patch.copy()
+    out[..., 3] = (patch[..., 3] * np.clip(soft, 0, 1)).astype(np.uint8)
+    return out, ink_px
+
+
+def clean_face_part(face, occl=None):
+    """Round-5 item 4/3: the face part's eye and mouth holes were inpainted
+    with skin, but the inpaint left 1-2px light rings around the eye zones and
+    a pale ghost of the master smile; along the cheeks it kept amber chips of
+    the hood lining, and pinholes that show the lining through. Light thin
+    outliers inside the skin are replaced by the local median skin; amber
+    chips on the face's rim lose their alpha (the hood lining under them is
+    the same colour); enclosed alpha holes are inpainted. Works in place at master
+    scale; returns the number of pixels touched.
+
+    Round 6: the rim-chip clear (step 2) and the hole inpaint (step 3) run
+    ONLY inside `occl` — the mask of areas hidden at rest under the fringe /
+    eye / mouth patches (split_parts.py saves qa/face-occluded.png). Those
+    two steps used to touch the visible cheek edge and broke the round-6
+    principle A (visible pixels must equal the master)."""
+    rgb = np.ascontiguousarray(face[..., :3])
+    a = face[..., 3]
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV).astype(np.int32)
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    opaque = (a > 200).astype(np.uint8)
+    skin_hue = (hue >= 4) & (hue <= 22)
+    med = cv2.medianBlur(cv2.medianBlur(rgb, 7), 7)
+    mhsv = cv2.cvtColor(med, cv2.COLOR_RGB2HSV).astype(np.int32)
+    med_skin = (mhsv[..., 0] >= 4) & (mhsv[..., 0] <= 22) & (mhsv[..., 1] > 30) & (mhsv[..., 2] > 200)
+    interior = cv2.erode(opaque, np.ones((7, 7), np.uint8)) > 0
+    lighter = (rgb.astype(np.int32) - med.astype(np.int32)).max(-1) > 6
+    paler = sat < mhsv[..., 1] - 12
+    fix = interior & med_skin & (lighter | paler)
+    face[..., :3][fix] = med[fix]
+    rim = (opaque > 0) & ~(cv2.erode(opaque, np.ones((17, 17), np.uint8)) > 0)
+    amber = skin_hue & (sat > 140) & (val > 150)
+    chips = rim & amber
+    n_chips = 0
+    n_holes = 0
+    if occl is None:
+        face[..., 3][chips] = 0
+        n_chips = int(chips.sum())
+        # pinholes inside the face silhouette let the hood lining show through
+        # as amber dots beside the cheeks: close them with inpainted skin
+        solid = (face[..., 3] > 200).astype(np.uint8)
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        holes = (fill_holes(closed) > 0) & (solid == 0)
+        if holes.any():
+            hm = holes.astype(np.uint8)
+            face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
+            face[..., 3][holes] = 255
+            n_holes = int(holes.sum())
+    else:
+        zone = cv2.dilate(occl, np.ones((7, 7), np.uint8)) > 0
+        chips &= zone
+        face[..., 3][chips] = 0
+        n_chips = int(chips.sum())
+        solid = (face[..., 3] > 200).astype(np.uint8)
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        holes = (fill_holes(closed) > 0) & (solid == 0) & zone
+        if holes.any():
+            hm = holes.astype(np.uint8)
+            face[..., :3] = cv2.inpaint(np.ascontiguousarray(face[..., :3]), hm, 3, cv2.INPAINT_TELEA)
+            face[..., 3][holes] = 255
+            n_holes = int(holes.sum())
+    return int(fix.sum() + n_chips + n_holes)
+
+
+# Round 5: every part is downscaled to 0.5x on its own. Parts are exclusive
+# (abutting hard edges at master scale), so after resampling each boundary
+# pixel is ~50% covered by BOTH neighbours and whatever lies underneath shows
+# through: the face's white under-fringe fill at every hair tip over the
+# lining (cheek "white blobs"), background along hood/hair seams (the faint
+# white streaks in every action). The guard recolours, within CONFLATION_R
+# master px inside each visible owner's edge, the pixels of every lower layer
+# to the master colour just across that edge, and lets the layer that owns
+# the far side extend under the edge at full alpha. The master-scale rest
+# composite is unchanged (the owner covers those pixels); the half-scale one
+# now blends each edge against the right colour.
+CONFLATION_R = 3
+# blush is translucent AND absent at rest (opacityParam 'blush' defaults 0):
+# as a guard "upper" it recoloured the hood's lining/shell to face-skin
+# pink along its claim's edge band — visible the moment the face swings
+CONFLATION_SKIP = ('blush', 'third-eye-glow')  # translucent overlays
+
+
+def conflation_guard(imgs, master):
+    ids = sorted((p for p in imgs if p in PART_META and not p.startswith('fx-')
+                  and p not in CONFLATION_SKIP), key=lambda p: PART_META[p]['z'])
+    h, w = master.shape[:2]
+    owner = np.full((h, w), -1, np.int32)
+    for i, pid in enumerate(ids):
+        owner[imgs[pid][..., 3] > 128] = i
+    m_opaque = master[..., 3] > 128
+    touched = 0
+    for u in range(1, len(ids)):
+        own = owner == u
+        if not own.any():
+            continue
+        dist, (iy, ix) = ndimage.distance_transform_edt(own, return_indices=True)
+        ys, xs = np.where(own & (dist <= CONFLATION_R))
+        by, bx = iy[ys, xs], ix[ys, xs]
+        far = owner[by, bx]
+        ok = m_opaque[by, bx] & (far >= 0) & (far < u)
+        ys, xs, by, bx, far = ys[ok], xs[ok], by[ok], bx[ok], far[ok]
+        col = master[by, bx, :3]
+        for low in range(u):
+            img = imgs[ids[low]]
+            is_far = far == low
+            sel = (img[ys, xs, 3] > 0) | is_far
+            # a lower pixel that already carries the master's own colour is
+            # correct rule-B content (the zipper tape crossing the strings'
+            # claims): recolouring it to the across-edge colour whitened the
+            # tape's edge at half scale (round-6 P1 probe)
+            cur = img[ys, xs, :3]
+            already = (np.abs(cur.astype(np.int16)
+                              - master[ys, xs, :3].astype(np.int16)).max(axis=1) <= 6)
+            sel = sel & ~(already & ~is_far)
+            img[ys[sel], xs[sel], :3] = col[sel]
+            img[ys[is_far], xs[is_far], 3] = 255
+            touched += int(sel.sum())
+    return touched
+
+
+def main():
+    master = np.array(Image.open(ART / 'master.png').convert('RGBA'))
+    hood_w, ground_y, center_x = measure_anchor(master)
+    print(f'anchor: hood={hood_w}px ground={ground_y} center={center_x}')
+
+    if PACK.exists():
+        shutil.rmtree(PACK)
+    (PACK / 'rig' / 'parts').mkdir(parents=True, exist_ok=True)
+
+    rig = {
+        'version': 1,
+        'master': {'width': int(master.shape[1]), 'height': int(master.shape[0]), 'scale': SCALE},
+        'anchor': {'hoodWidth': hood_w, 'groundY': ground_y, 'centerX': center_x},
+        'parts': [],
+        'groups': {
+            'body': {'pivot': [center_x, ground_y]},
+            'head': {'parent': 'body', 'pivot': [center_x, int(ground_y * 0.47)]},
+        },
+        'clips': [f'clips/{n}.json' for n in sorted(p.stem for p in (ART / 'clips-out/clips').glob('*.json'))],
+        'expressions': 'expressions.json',
+    }
+
+    face_master = None  # cleaned face at master scale, for mouth cleanup
+    guarded = {}
+    for pid in PART_META:
+        src = ART / 'parts-ext' / f'{pid}.png'
+        if src.exists():
+            guarded[pid] = np.array(Image.open(src).convert('RGBA'))
+    # Round 6: the conflation guard must not rewrite the rebuilt lining
+    # inside the hood opening. For an upper edge band it writes the master
+    # colour of the nearest ACROSS-edge pixel into every lower layer — under
+    # the fringe that far colour is face skin, and the hood's lining pixels
+    # in the band became skin. Inside the opening the rebuilt lining already
+    # IS the correct blend partner (fringe-over-lining matches the master's
+    # own edge AA), so its pre-guard RGB is restored afterwards.
+    hood_opening_mask = None
+    hood_pre_guard = None
+    opening_path = ART / 'qa' / 'hood-opening.png'
+    if 'hood' in guarded and opening_path.exists():
+        hood_opening_mask = np.array(Image.open(opening_path).convert('L')) > 127
+        hood_pre_guard = guarded['hood'][..., :3].copy()
+    if 'face' in guarded:
+        # face cleanup first: its rim-chip rule would undo guard colours.
+        # Round 6: steps 2/3 only inside the areas hidden at rest (the
+        # occlusion mask split_parts.py saves); missing mask = old behavior.
+        occl_path = ART / 'qa' / 'face-occluded.png'
+        occl = np.array(Image.open(occl_path).convert('L')) if occl_path.exists() else None
+        print(f'face clean: {clean_face_part(guarded["face"], occl)} px'
+              + (' (occl-restricted)' if occl is not None else ' (occl MISSING)'))
+    print(f'conflation guard: {conflation_guard(guarded, master)} px recoloured')
+    if hood_opening_mask is not None:
+        guarded['hood'][..., :3][hood_opening_mask] = hood_pre_guard[hood_opening_mask]
+        print(f'hood lining restored inside opening: {int(hood_opening_mask.sum())} px')
+    # R7: the dome-slash band (above the opening's top rim) paints hood
+    # INTERIOR white in the back layer — the conflation guard would recolour
+    # it to the across-edge ink; restore it the same way as the lining.
+    slash_path = ART / 'qa' / 'hood-dome-slash.png'
+    if slash_path.exists():
+        slash = np.array(Image.open(slash_path).convert('L')) > 127
+        guarded['hood'][..., :3][slash] = (250, 250, 250)
+        guarded['hood'][..., 3][slash] = 255
+        print(f'hood dome-slash white restored: {int(slash.sum())} px')
+    for pid, meta in PART_META.items():
+        src = ART / 'parts-ext' / f'{pid}.png'
+        if not src.exists():
+            src = ART / 'parts-full' / f'{pid}.png'
+        if not src.exists():
+            print(f'skip missing part: {pid}')
+            continue
+        img = guarded[pid] if pid in guarded else np.array(Image.open(src).convert('RGBA'))
+        if pid == 'face':
+            face_master = img  # cleaned before the conflation guard
+        if pid == 'mouth' and face_master is not None:
+            img, _ = clean_mouth_patch(img, 0, 0, face_master)
+        mask = img[..., 3] > 8
+        box = bbox_of(mask)
+        if box is None:
+            continue
+        x0, y0, x1, y1 = box
+        # Round 6: even-align the crop to the master pixel grid. An odd bbox
+        # origin resamples the part half a master pixel off the whole-master
+        # grid, and 1px master features (the zipper tape core) fall into the
+        # LANCZOS kernel's negative lobes — they come out as dark/light
+        # column pairs at pack scale (round-6 P1). Even origins make the
+        # part's resampling identical to the whole-master downscale the pack
+        # is judged against; content keeps its absolute position (the padded
+        # rows/columns are transparent, and mask-derived pivots are absolute).
+        x0 -= x0 & 1
+        y0 -= y0 & 1
+        x1 += x1 & 1
+        y1 += y1 & 1
+        crop = Image.fromarray(img[y0:y1, x0:x1])
+        ow, oh = crop.size
+        crop = crop.resize((max(1, round(ow * SCALE)), max(1, round(oh * SCALE))), Image.LANCZOS)
+        arr = np.array(crop)
+        clean_edge_halo(arr)
+        crop = Image.fromarray(arr)
+        rel = f'parts/{pid}.png'
+        crop.save(PACK / 'rig' / rel, optimize=True)
+        # Slot-name-keyed defaults; A6 patches register more slots per part.
+        # Slot values are SlotImage objects ({image, x, y}) per rig.json schema.
+        SLOT_DEFAULTS = {
+            'arm-L': 'down',
+            'arm-R': 'down',
+            'eye-L': 'open',
+            'eye-R': 'open',
+            'mouth': 'smile',
+            'third-eye': 'closed',
+        }
+        entry = {
+            'id': pid,
+            'image': rel,
+            'x': int(x0),
+            'y': int(y0),
+            'z': meta['z'],
+            'parent': meta['parent'],
+            'pivot': [int((x0 + x1) / 2), int((y0 + y1) / 2)],
+        }
+        if pid in ('arm-L', 'arm-R'):
+            # arms rotate about the shoulder (A4), not the bbox centre —
+            # the wave fallback swings the whole arm around this point
+            # Round 5: the pivot sits INSIDE the sleeve top (mid of the
+            # sleeve row 24 px below its top). The bbox-centre x used before
+            # fell outside the sleeve (in the background beside the
+            # shoulder), so every swing dragged the shoulder tip out past
+            # the hood edge (white tip at +-15 deg) and the wave lifted the
+            # open shoulder cut clear of the body.
+            solid = img[..., 3] > 128
+            top = int(np.where(solid.any(1))[0][0])
+            row = np.where(solid[top + ARM_PIVOT_DROP])[0]
+            entry['pivot'] = [int((row.min() + row.max()) / 2), top + ARM_PIVOT_DROP]
+        if pid in SLOT_DEFAULTS:
+            entry['slots'] = {
+                SLOT_DEFAULTS[pid]: {'image': rel, 'x': int(x0), 'y': int(y0)}
+            }
+        if 'opacityParam' in meta:
+            entry['opacityParam'] = meta['opacityParam']
+        if 'blend' in meta:
+            entry['blend'] = meta['blend']
+        rig['parts'].append(entry)
+
+    # A6 arm slots extracted from registered variants (extract_arm_slots.py):
+    # slot PNGs copy into rig/parts and the {image,x,y} objects merge into the
+    # part entries. Families that failed isolation stay absent (F4 fallback).
+    slots_file = ART / 'slots.json'
+    if slots_file.exists():
+        slots = json.loads(slots_file.read_text(encoding='utf-8'))
+        for slot_png in sorted((ART / 'slots').glob('arm-*.png')):
+            shutil.copy(slot_png, PACK / 'rig' / 'parts' / slot_png.name)
+        for entry in rig['parts']:
+            extra = slots.get(entry['id'])
+            if extra:
+                entry.setdefault('slots', {}).update(extra)
+
+    # A6 expression patches (extract_patches.py): eye/mouth shape slots keyed
+    # by the eye.shape / mouth.shape enums. Patches are cut at master scale
+    # (offset = top-left in master px); like every part image they export at
+    # half scale while x/y stay in master space. Shapes without a usable patch
+    # (squeeze/teary/wink, most mouths) stay absent and the solver's slot
+    # fallback (down/open/smile/closed) answers them (F4).
+    report_file = ART / 'patches' / 'patches-report.json'
+    if report_file.exists():
+        report = json.loads(report_file.read_text(encoding='utf-8'))
+        rename = {'lookup': 'look-up'}
+        by_id = {e['id']: e for e in rig['parts']}
+        for name, rep in sorted(report.items()):
+            sides = ('L', 'R') if 'L' in rep else (None,)
+            for side in sides:
+                src = ROOT / (rep[side]['image'] if side else rep['image'])
+                ox, oy = rep[side]['offset'] if side else rep['offset']
+                if name.startswith('third-eye-'):
+                    # P1-1: third-eye half/open patches from the A2 variants
+                    shape = name[len('third-eye-'):]
+                    part_id = 'third-eye'
+                elif name.startswith('eye-'):
+                    shape = name[4:]
+                    part_id = f'eye-{side}'
+                else:
+                    shape = name[6:]
+                    part_id = 'mouth'
+                shape = rename.get(shape, shape)
+                target = by_id.get(part_id)
+                if not target:
+                    continue
+                im = Image.open(src).convert('RGBA')
+                if part_id == 'mouth' and face_master is not None:
+                    cleaned, ink_px = clean_mouth_patch(np.array(im), int(ox), int(oy), face_master)
+                    if ink_px < MOUTH_MIN_INK:
+                        # nothing but chin/lining left: let the solver fall
+                        # back to the default mouth instead of a smudge (F4)
+                        print(f'drop mouth slot {shape}: {ink_px} ink px')
+                        continue
+                    im = Image.fromarray(cleaned)
+                half = im.resize(
+                    (max(1, round(im.width * SCALE)), max(1, round(im.height * SCALE))),
+                    Image.LANCZOS,
+                )
+                if part_id == 'third-eye':
+                    # the halo pass suits silhouette-edge parts only; eye and
+                    # mouth patches sit inside the face with a feathered
+                    # alpha that IS bright and < 200 everywhere near their
+                    # edge — the pass shredded them (round-4 eye-lookup-R)
+                    arr = np.array(half)
+                    clean_edge_halo(arr)
+                    half = Image.fromarray(arr)
+                out_name = f'{name}-{side}.png' if side else f'{name}.png'
+                rel = f'parts/{out_name}'
+                half.save(PACK / 'rig' / rel, optimize=True)
+                target.setdefault('slots', {})[shape] = {'image': rel, 'x': int(ox), 'y': int(oy)}
+
+    # Copy clips + expressions produced by make-clips.cjs.
+    clips_src = ART / 'clips-out'
+    (PACK / 'rig' / 'clips').mkdir(parents=True, exist_ok=True)
+    for f in sorted((clips_src / 'clips').glob('*.json')):
+        shutil.copy(f, PACK / 'rig' / 'clips' / f.name)
+    shutil.copy(clips_src / 'expressions.json', PACK / 'rig' / 'expressions.json')
+
+    # Sprite sheets: the four sprite: actions from b3-sprites-v2.
+    sprite_meta = json.loads((SPRITES_V2 / 'sprites.json').read_text(encoding='utf-8'))
+    (PACK / 'sprites').mkdir(parents=True, exist_ok=True)
+    out_states = {}
+    for name in ('dance', 'sit', 'sit-idle', 'hide-in-hood'):
+        src_sheet = SPRITES_V2 / f'{name}.png'
+        meta = sprite_meta['states'].get(name)
+        if src_sheet.exists() and meta:
+            shutil.copy(src_sheet, PACK / 'sprites' / f'{name}.png')
+            out_states[name] = meta
+    sprites_json = {
+        'cell': sprite_meta.get('cell', 256),
+        'ground': sprite_get_ground(sprite_meta),
+        'states': out_states,
+    }
+    (PACK / 'sprites' / 'sprites.json').write_text(
+        json.dumps(sprites_json, indent=1, ensure_ascii=False) + '\n', encoding='utf-8'
+    )
+
+    # Manifest: behaviour data from characters/b3, animations remapped.
+    b3 = json.loads(B3_MANIFEST.read_text(encoding='utf-8'))
+    clip_names = {p.stem for p in (PACK / 'rig' / 'clips').glob('*.json')}
+    animations = {}
+    for action in b3['animations']:
+        if action in clip_names:
+            animations[action] = f'rig:{action}'
+        elif action in out_states:
+            animations[action] = f'sprite:{action}'
+        else:
+            animations[action] = 'rig:idle'  # documented fallback (task book D)
+    manifest = {
+        'id': 'baize-b3',
+        'name': b3.get('name', '白泽'),
+        'version': '1.0.0',
+        'renderer': 'rig',
+        'rig': 'rig/rig.json',
+        'animations': animations,
+        'emotion': b3.get('emotion'),
+        'behavior': b3.get('behavior'),
+        'scenes': b3.get('scenes'),
+        'lines': b3.get('lines'),
+    }
+    (PACK / 'manifest.json').write_text(
+        json.dumps(manifest, indent=1, ensure_ascii=False) + '\n', encoding='utf-8'
+    )
+
+    rig_json = PACK / 'rig' / 'rig.json'
+    rig_json.write_text(json.dumps(rig, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    # The exporter rebuilds the pack directory from scratch; the license and
+    # pack README are part of the deliverable and live here so re-exports
+    # never drop them.
+    (PACK / 'LICENSE.txt').write_text(LICENSE_TEXT, encoding='utf-8')
+    (PACK / 'README.md').write_text(PACK_README, encoding='utf-8')
+
+    total = sum(f.stat().st_size for f in PACK.rglob('*') if f.is_file())
+    print(f'pack -> {PACK} ({total / 1e6:.2f} MB)')
+
+
+LICENSE_TEXT = '''BaiZe B3 layered rig character pack ("白泽连帽衫")
+
+Artwork derived from the project's own variant-B character design
+(demo/baize-design, variants/variant-b.js). The rig master and part
+images were generated with the tzcode.top gpt-image-2.5 image model
+using demo/pet-demo/b3-frames/ref-standard(-s).png as the style
+reference, then segmented, joint-extended and exported by the
+reproducible pipeline in tools/rig-pipeline/ (see README.md for the
+full rebuild command list). Sprite sheets under sprites/ are the
+normalized atlas strips from demo/pet-demo/b3-sprites-v2 (normalized
+by build-sprites-2.py).
+
+Distributed under the same license as the repository code: AGPL-3.0-only.
+'''
+
+PACK_README = '''# baize-b3 · 分层 rig 角色包
+
+默认角色包（renderer: "rig"）：分层部件 + 程序动画，动作名与行为系统逐一对应（35 个 rig clips + 4 个 sprite 图集 = 39 个动画键）。
+
+## 目录结构
+
+- `manifest.json` — renderer: "rig"，animations 用 `rig:<clip>` / `sprite:<sheet>` 两种前缀形式
+- `rig/rig.json` — 部件表（z/parent/pivot/插槽）、锚点（hoodWidth=524px、groundY=1101、centerX=435，master 像素坐标）、clips/expressions 清单
+- `rig/parts/*.png` — 每部件一张（0.5x master 缩放，角色高 512px）
+- `rig/clips/*.json` — 关键帧动作（由 `tools/rig-pipeline/make-clips.cjs` 生成）
+- `rig/expressions.json` — 18 个表情预设
+- `sprites/*.png + sprites.json` — 4 个大动作图集（dance/sit/sit-idle/hide-in-hood），256 网格、地面线 246，与 rig 共用锚点
+
+## 从 demo/ 原始素材重建（命令清单）
+
+```bash
+# 0) Python 环境（一次）
+python3 -m venv demo/rig-art/.venv
+demo/rig-art/.venv/bin/pip install numpy pillow scipy opencv-python-headless torch torchvision segment-anything
+# SAM 权重: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -> demo/rig-art/models/
+
+# 1) master 候选生成（需 BAIZE_IMAGE_API_KEY，key 只走环境变量）
+BAIZE_IMAGE_API_KEY=$(node demo/rig-art/key.cjs) node tools/rig-pipeline/gen-image.cjs batch --jobs demo/rig-art/master-jobs.json
+#    人工从 demo/rig-art/master-candidates/ 挑选（本轮选 m3），写进 normalize_master.py 的常量
+
+# 2) 归一化（角色高 1024px）
+demo/rig-art/.venv/bin/python tools/rig-pipeline/normalize_master.py
+
+# 3) 变体生成（12 种 × 2 候选，master 单参考）
+node tools/rig-pipeline/make-variant-jobs.cjs
+BAIZE_IMAGE_API_KEY=$(node demo/rig-art/key.cjs) node tools/rig-pipeline/gen-image.cjs batch --jobs demo/rig-art/variant-jobs.json
+
+# 4) 配准（ECC 金字塔 + ORB 回退，叠图人工验收）
+demo/rig-art/.venv/bin/python tools/rig-pipeline/register_variants.py
+
+# 5) SAM 分割（parts.prompts.json 为可复现提示）
+demo/rig-art/.venv/bin/python tools/rig-pipeline/segment_parts.py
+
+# 6) A5 关节外扩
+demo/rig-art/.venv/bin/python tools/rig-pipeline/extend_parts.py
+
+# 7) A9 验收（复原/关节压力/小尺寸，报告在 demo/rig-art/qa/qa-report.txt）
+demo/rig-art/.venv/bin/python tools/rig-pipeline/qa.py
+
+# 8) clips + 表情预设
+node tools/rig-pipeline/make-clips.cjs demo/rig-art/clips-out
+
+# 9) 导出本包
+demo/rig-art/.venv/bin/python tools/rig-pipeline/export_pack.py
+```
+
+## 已知问题
+
+- master（m3）与序列帧源（ref-standard）头身比例存在约 12% 差异；rig↔sprite 切换处兜帽宽度与地面线已对齐（双锚点），角色高度差待联系表目检后决定是否按高度重归一化图集
+- 手臂插槽当前只有 down 姿势；wave/up/hold 等插槽待变体配准后由 export_pack.py 注册
+- 眼/嘴插槽当前只有 open/smile；A6 表情贴片批次完成后扩充
+'''
+
+
+def sprite_get_ground(meta):
+    return meta.get('ground', 246)
+
+
+if __name__ == '__main__':
+    main()

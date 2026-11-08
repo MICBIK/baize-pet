@@ -1,0 +1,43 @@
+{
+ "name": "listen",
+ "duration": 1200,
+ "loop": true,
+ "layer": "action",
+ "expression": "surprised",
+ "tracks": {
+  "head.turnY": [
+   [
+    0,
+    -0.15
+   ]
+  ],
+  "ear.L.rot": [
+   [
+    0,
+    10
+   ]
+  ],
+  "ear.R.rot": [
+   [
+    0,
+    10
+   ]
+  ],
+  "head.y": [
+   [
+    0,
+    0
+   ],
+   [
+    200,
+    4,
+    "easeOutSine"
+   ],
+   [
+    400,
+    0,
+    "easeInOutSine"
+   ]
+  ]
+ }
+}

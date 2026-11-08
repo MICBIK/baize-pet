@@ -1,0 +1,58 @@
+{
+ "name": "sleep",
+ "duration": 4600,
+ "loop": true,
+ "layer": "action",
+ "expression": "sleeping",
+ "tracks": {
+  "head.turnY": [
+   [
+    0,
+    0.55
+   ]
+  ],
+  "head.tilt": [
+   [
+    0,
+    8
+   ]
+  ],
+  "ear.L.rot": [
+   [
+    0,
+    -15
+   ]
+  ],
+  "ear.R.rot": [
+   [
+    0,
+    -15
+   ]
+  ],
+  "body.breath": [
+   [
+    0,
+    0
+   ],
+   [
+    2300,
+    0.5,
+    "easeInOutSine"
+   ],
+   [
+    4600,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   600,
+   "fx:zzz"
+  ],
+  [
+   2900,
+   "fx:zzz"
+  ]
+ ]
+}

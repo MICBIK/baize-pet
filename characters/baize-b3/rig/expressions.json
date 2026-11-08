@@ -1,0 +1,131 @@
+{
+ "expressions": [
+  {
+   "name": "neutral",
+   "params": {}
+  },
+  {
+   "name": "happy",
+   "params": {
+    "eye.shape": "smile",
+    "mouth.shape": "smile"
+   }
+  },
+  {
+   "name": "laugh",
+   "params": {
+    "eye.shape": "smile",
+    "mouth.shape": "wide"
+   }
+  },
+  {
+   "name": "wink",
+   "params": {
+    "eye.shape": "wink",
+    "mouth.shape": "grin"
+   }
+  },
+  {
+   "name": "starstruck",
+   "params": {
+    "eye.shape": "star",
+    "mouth.shape": "wide"
+   }
+  },
+  {
+   "name": "surprised",
+   "params": {
+    "eye.shape": "wide",
+    "mouth.shape": "o"
+   }
+  },
+  {
+   "name": "confused",
+   "params": {
+    "eye.shape": "auto",
+    "mouth.shape": "flat"
+   }
+  },
+  {
+   "name": "thinking",
+   "params": {
+    "eye.shape": "look-up",
+    "mouth.shape": "cat",
+    "thirdEye": 1,
+    "thirdEye.glow": 0.6
+   }
+  },
+  {
+   "name": "sleepy",
+   "params": {
+    "eye.shape": "sleepy",
+    "mouth.shape": "small"
+   }
+  },
+  {
+   "name": "sleeping",
+   "params": {
+    "eye.shape": "closed",
+    "mouth.shape": "small"
+   }
+  },
+  {
+   "name": "bored",
+   "params": {
+    "eye.shape": "half",
+    "mouth.shape": "flat"
+   }
+  },
+  {
+   "name": "pout",
+   "params": {
+    "eye.shape": "auto",
+    "mouth.shape": "pout",
+    "blush": 0.3
+   }
+  },
+  {
+   "name": "angry",
+   "params": {
+    "eye.shape": "focus",
+    "mouth.shape": "puff"
+   }
+  },
+  {
+   "name": "shy",
+   "params": {
+    "eye.shape": "auto",
+    "mouth.shape": "smile",
+    "blush": 1
+   }
+  },
+  {
+   "name": "teary",
+   "params": {
+    "eye.shape": "teary",
+    "mouth.shape": "wobbly"
+   }
+  },
+  {
+   "name": "smug",
+   "params": {
+    "eye.shape": "half",
+    "mouth.shape": "grin"
+   }
+  },
+  {
+   "name": "determined",
+   "params": {
+    "eye.shape": "focus",
+    "mouth.shape": "smile"
+   }
+  },
+  {
+   "name": "dizzy",
+   "params": {
+    "eye.shape": "swirl",
+    "mouth.shape": "wobbly"
+   }
+  }
+ ]
+}

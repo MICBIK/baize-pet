@@ -1,0 +1,87 @@
+{
+ "name": "snack",
+ "duration": 3200,
+ "loop": false,
+ "layer": "action",
+ "expression": "happy",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "head.turnY": [
+   [
+    400,
+    0
+   ],
+   [
+    700,
+    0.3,
+    "easeOutSine"
+   ],
+   [
+    1000,
+    0.3
+   ],
+   [
+    1100,
+    0,
+    "easeInOutSine"
+   ],
+   [
+    1400,
+    0.3,
+    "easeOutSine"
+   ],
+   [
+    1700,
+    0.3
+   ],
+   [
+    1800,
+    0,
+    "easeInOutSine"
+   ],
+   [
+    2100,
+    0.3,
+    "easeOutSine"
+   ],
+   [
+    2400,
+    0.3
+   ],
+   [
+    2500,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "mouth.shape": [
+   [
+    1000,
+    "puff"
+   ],
+   [
+    1400,
+    "puff"
+   ],
+   [
+    1800,
+    "puff"
+   ],
+   [
+    2600,
+    "smile"
+   ]
+  ]
+ }
+}

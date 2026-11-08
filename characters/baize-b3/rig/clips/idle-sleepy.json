@@ -1,0 +1,54 @@
+{
+ "name": "idle-sleepy",
+ "duration": 4800,
+ "loop": true,
+ "layer": "base",
+ "expression": "sleepy",
+ "tracks": {
+  "eye.L.open": [
+   [
+    0,
+    0.6
+   ],
+   [
+    2000,
+    0.2,
+    "easeInOutSine"
+   ],
+   [
+    2800,
+    0.6,
+    "easeInOutSine"
+   ],
+   [
+    4400,
+    0.25,
+    "easeInOutSine"
+   ],
+   [
+    4800,
+    0.5
+   ]
+  ],
+  "head.turnY": [
+   [
+    3000,
+    0
+   ],
+   [
+    3600,
+    0.6,
+    "easeInOutSine"
+   ],
+   [
+    4200,
+    0.6
+   ],
+   [
+    4400,
+    0,
+    "easeOutBack"
+   ]
+  ]
+ }
+}

@@ -1,0 +1,70 @@
+{
+ "name": "cry",
+ "duration": 2400,
+ "loop": false,
+ "layer": "action",
+ "expression": "teary",
+ "tracks": {
+  "arm.R.slot": [
+   [
+    0,
+    "rub"
+   ],
+   [
+    800,
+    "down"
+   ],
+   [
+    1200,
+    "rub"
+   ],
+   [
+    2000,
+    "down"
+   ]
+  ],
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    600,
+    0.06,
+    "easeOutSine"
+   ],
+   [
+    700,
+    0
+   ],
+   [
+    1200,
+    0.06,
+    "easeOutSine"
+   ],
+   [
+    1300,
+    0
+   ],
+   [
+    1800,
+    0.06,
+    "easeOutSine"
+   ],
+   [
+    1900,
+    0
+   ]
+  ]
+ },
+ "events": [
+  [
+   300,
+   "fx:tear"
+  ],
+  [
+   1500,
+   "fx:tear"
+  ]
+ ]
+}

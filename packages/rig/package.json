@@ -1,0 +1,18 @@
+{
+  "name": "@baize/rig",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "BaiZe layered character rig runtime: params, clips, mixing, procedural life, springs and pose solver",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

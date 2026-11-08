@@ -1,0 +1,76 @@
+{
+ "name": "happy",
+ "duration": 900,
+ "loop": false,
+ "layer": "action",
+ "expression": "laugh",
+ "tracks": {
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    160,
+    0.25,
+    "easeOutSine"
+   ],
+   [
+    300,
+    -0.15,
+    "easeOutBack"
+   ],
+   [
+    700,
+    0.1,
+    "easeOutSine"
+   ],
+   [
+    900,
+    0
+   ]
+  ],
+  "body.y": [
+   [
+    240,
+    0
+   ],
+   [
+    420,
+    -24,
+    "easeOutCubic"
+   ],
+   [
+    700,
+    0,
+    "easeInSine"
+   ]
+  ],
+  "arm.L.slot": [
+   [
+    240,
+    "up"
+   ],
+   [
+    800,
+    "down"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    240,
+    "up"
+   ],
+   [
+    800,
+    "down"
+   ]
+  ]
+ },
+ "events": [
+  [
+   300,
+   "fx:sparkle3"
+  ]
+ ]
+}

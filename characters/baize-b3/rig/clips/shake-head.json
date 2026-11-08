@@ -1,0 +1,45 @@
+{
+ "name": "shake-head",
+ "duration": 1000,
+ "loop": false,
+ "layer": "action",
+ "expression": "pout",
+ "tracks": {
+  "head.turnX": [
+   [
+    0,
+    0
+   ],
+   [
+    250,
+    -0.6,
+    "easeInOutSine"
+   ],
+   [
+    500,
+    0.6,
+    "easeInOutSine"
+   ],
+   [
+    750,
+    -0.5,
+    "easeInOutSine"
+   ],
+   [
+    1000,
+    0,
+    "easeInOutSine"
+   ]
+  ],
+  "eye.shape": [
+   [
+    0,
+    "closed"
+   ],
+   [
+    900,
+    "auto"
+   ]
+  ]
+ }
+}

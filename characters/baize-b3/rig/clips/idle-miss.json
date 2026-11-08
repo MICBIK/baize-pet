@@ -1,0 +1,53 @@
+{
+ "name": "idle-miss",
+ "duration": 3500,
+ "loop": true,
+ "layer": "base",
+ "expression": "teary",
+ "tracks": {
+  "arm.L.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "arm.R.slot": [
+   [
+    0,
+    "hold"
+   ]
+  ],
+  "ear.L.rot": [
+   [
+    0,
+    -20
+   ]
+  ],
+  "ear.R.rot": [
+   [
+    0,
+    -20
+   ]
+  ],
+  "eye.lookY": [
+   [
+    0,
+    0.6
+   ],
+   [
+    2000,
+    0.6
+   ],
+   [
+    2400,
+    -0.3,
+    "easeInOutSine"
+   ],
+   [
+    3300,
+    0.6,
+    "easeInOutSine"
+   ]
+  ]
+ }
+}

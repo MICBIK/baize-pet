@@ -1,0 +1,52 @@
+{
+ "name": "idle-bored",
+ "duration": 5000,
+ "loop": true,
+ "layer": "base",
+ "expression": "bored",
+ "tracks": {
+  "head.tilt": [
+   [
+    0,
+    6
+   ]
+  ],
+  "body.squash": [
+   [
+    0,
+    0
+   ],
+   [
+    2000,
+    -0.1,
+    "easeInOutSine"
+   ],
+   [
+    2600,
+    0
+   ]
+  ],
+  "leg.R.rot": [
+   [
+    4000,
+    0
+   ],
+   [
+    4200,
+    12,
+    "easeOutBack"
+   ],
+   [
+    4600,
+    0,
+    "easeInOutSine"
+   ]
+  ]
+ },
+ "events": [
+  [
+   2000,
+   "fx:puff"
+  ]
+ ]
+}
