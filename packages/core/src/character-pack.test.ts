@@ -274,3 +274,63 @@ describe('rig packs', () => {
     expect(() => loadCharacterPack(dir)).toThrow(/requires renderer/)
   })
 })
+
+describe('p2l packs', () => {
+  const P2L_MANIFEST = {
+    id: 'p2l-pack',
+    name: '网格角色',
+    version: '1.0.0',
+    renderer: 'p2l',
+    model: 'p2l/model.p2lrt',
+    animations: { idle: 'p2l:Idle', happy: 'p2l:Happy@Smile', shy: 'p2l:@Shy' },
+  }
+
+  function writeP2lPack(name: string, manifest: unknown, withModel = true): string {
+    const dir = writePack(name, manifest, { skipAnimations: true })
+    if (withModel) {
+      mkdirSync(join(dir, 'p2l'), { recursive: true })
+      writeFileSync(join(dir, 'p2l', 'model.p2lrt'), 'P2L')
+    }
+    return dir
+  }
+
+  it('accepts a p2l pack with clip and expression forms', () => {
+    const pack = loadCharacterPack(writeP2lPack('p2l-ok', P2L_MANIFEST))
+    expect(pack.manifest.renderer).toBe('p2l')
+    expect(pack.manifest.model).toBe('p2l/model.p2lrt')
+    expect(pack.manifest.animations.happy).toBe('p2l:Happy@Smile')
+  })
+
+  it('requires an existing .p2lrt model inside the pack', () => {
+    expect(() =>
+      loadCharacterPack(writeP2lPack('p2l-nofield', { ...P2L_MANIFEST, model: undefined })),
+    ).toThrow(/"model" field/)
+    expect(() => loadCharacterPack(writeP2lPack('p2l-missing', P2L_MANIFEST, false))).toThrow(
+      /does not exist/,
+    )
+    expect(() =>
+      loadCharacterPack(writeP2lPack('p2l-escape', { ...P2L_MANIFEST, model: '../x.p2lrt' })),
+    ).toThrow(/unsafe/)
+    expect(() =>
+      loadCharacterPack(writeP2lPack('p2l-ext', { ...P2L_MANIFEST, model: 'p2l/model.json' })),
+    ).toThrow(/unsafe|\.p2lrt/)
+  })
+
+  it('rejects malformed p2l: values and p2l: on other renderers', () => {
+    expect(() =>
+      loadCharacterPack(
+        writeP2lPack('p2l-bad', { ...P2L_MANIFEST, animations: { idle: 'p2l:@' } }),
+      ),
+    ).toThrow(/malformed/)
+    expect(() =>
+      loadCharacterPack(
+        writeP2lPack('p2l-bad2', { ...P2L_MANIFEST, animations: { idle: 'p2l:a b' } }),
+      ),
+    ).toThrow(/malformed/)
+    const dir = writePack('p2l-on-video', {
+      ...VALID_MANIFEST,
+      animations: { ...VALID_MANIFEST.animations, wave: 'p2l:Wave' },
+    })
+    expect(() => loadCharacterPack(dir)).toThrow(/requires renderer "p2l"/)
+  })
+})

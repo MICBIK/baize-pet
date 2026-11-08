@@ -16,7 +16,8 @@
       "!docs",
       "!**/.github",
       "!pnpm-lock.yaml",
-      "!**/characters"
+      "!**/characters",
+      "!**/vendor"
     ]
   },
   "formatter": {

@@ -3,6 +3,7 @@
 import type { CharacterInfo, PetActionName } from '@baize/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { alphaAt, HIT_ALPHA_THRESHOLD, makeScratchCanvas } from './pet/hitTest'
+import { type P2lHitTester, P2lPlayer } from './pet/P2lPlayer'
 import { RigPlayer } from './pet/RigPlayer'
 import { containRect } from './pet/VideoPlayer'
 
@@ -10,13 +11,14 @@ const DRAG_THRESHOLD_PX = 5
 const BUBBLE_MS = 4000
 
 /**
- * The pet layer: picks the renderer from the pack manifest (video webm or
- * layered rig), runs the per-pixel alpha hit test that toggles window
+ * The pet layer: picks the renderer from the pack manifest (video webm,
+ * layered rig or p2l mesh model), runs the per-pixel alpha hit test that toggles window
  * click-through, and drives window dragging and the speech bubble.
  */
 export function PetLayer() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const p2lHitRef = useRef<P2lHitTester | null>(null)
   const interactiveRef = useRef(false)
   const dragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 })
   const [character, setCharacter] = useState<CharacterInfo | null>(null)
@@ -61,6 +63,16 @@ export function PetLayer() {
    */
   const hitTest = useCallback(
     (clientX: number, clientY: number) => {
+      if (character?.renderer === 'p2l') {
+        const tester = p2lHitRef.current
+        if (!tester) return
+        try {
+          setInteractive(tester(clientX, clientY))
+        } catch {
+          setInteractive(true)
+        }
+        return
+      }
       if (character?.renderer === 'rig') {
         const canvas = canvasRef.current
         if (!canvas || canvas.width === 0) return
@@ -186,7 +198,16 @@ export function PetLayer() {
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
-      {isRig ? (
+      {character.renderer === 'p2l' ? (
+        <P2lPlayer
+          info={character}
+          action={action}
+          say={say}
+          cursor={cursor}
+          onEnded={onEnded}
+          hitTesterRef={p2lHitRef}
+        />
+      ) : isRig ? (
         <>
           <RigPlayer info={character} action={action} say={say} cursor={cursor} />
           <canvas ref={canvasRef} style={{ display: 'none' }} />

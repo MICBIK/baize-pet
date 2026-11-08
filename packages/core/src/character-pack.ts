@@ -68,14 +68,20 @@ export const CharacterManifestSchema = z.object({
   name: z.string().min(1),
   version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+].*)?$/, 'must be semver'),
   description: z.string().optional(),
-  /** Renderer kind: "video" (webm, default) or "rig" (layered parts). */
-  renderer: z.enum(['video', 'rig']).default('video'),
+  /**
+   * Renderer kind: "video" (webm, default), "rig" (layered parts) or "p2l"
+   * (PSD2Live mesh model played by the vendored MIT web player, ADR 0008).
+   */
+  renderer: z.enum(['video', 'rig', 'p2l']).default('video'),
   /** rig.json path relative to the pack root; required when renderer is "rig". */
   rig: z.string().optional(),
+  /** .p2lrt model path relative to the pack root; required when renderer is "p2l". */
+  model: z.string().optional(),
   /**
-   * Action name -> animation. Three value forms: "rig:<clip>" (rig clip),
-   * "sprite:<sheet>" (atlas sheet in sprites/sprites.json) or a plain
-   * pack-relative file path (video renderer).
+   * Action name -> animation. Value forms: "rig:<clip>" (rig clip),
+   * "sprite:<sheet>" (atlas sheet in sprites/sprites.json),
+   * "p2l:<clip>[@<expression>]" (p2l model clip and/or expression; either
+   * may be empty but not both) or a plain pack-relative file path (video).
    */
   animations: z
     .record(z.string().min(1), z.string().min(1))
@@ -88,6 +94,9 @@ export const CharacterManifestSchema = z.object({
 })
 
 export type CharacterManifest = z.infer<typeof CharacterManifestSchema>
+
+/** "p2l:<clip>[@<expression>]" with at least one of the two names present. */
+const P2L_ANIMATION = /^p2l:(?:[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?|@[A-Za-z0-9._-]+)$/
 
 /** Raised with a human-readable summary of what is wrong with a pack. */
 export class CharacterPackError extends Error {
@@ -175,6 +184,20 @@ export function loadCharacterPack(dir: string): LoadedCharacterPack {
     }
   }
 
+  if (parsed.data.renderer === 'p2l') {
+    const model = parsed.data.model
+    if (!model) {
+      throw new CharacterPackError(`p2l pack is missing the "model" field: ${packDir}`)
+    }
+    if (!isSafePackRelPath(model) || !model.endsWith('.p2lrt')) {
+      throw new CharacterPackError(`p2l model path is unsafe or not a .p2lrt file: ${model}`)
+    }
+    const modelPath = resolve(packDir, model)
+    if (!modelPath.startsWith(packDir) || !existsSync(modelPath)) {
+      throw new CharacterPackError(`p2l model does not exist inside the pack: ${model}`)
+    }
+  }
+
   const files = listAnimationFiles(packDir)
   const spritesJsonPath = join(packDir, 'sprites', 'sprites.json')
   let spriteStates: { states?: Record<string, unknown> } | null = null
@@ -199,6 +222,15 @@ export function loadCharacterPack(dir: string): LoadedCharacterPack {
         throw new CharacterPackError(`rig: clip name for "${action}" is unsafe: ${file}`)
       }
       continue // existence checked below against rigData.clips
+    }
+    if (file.startsWith('p2l:')) {
+      if (parsed.data.renderer !== 'p2l') {
+        throw new CharacterPackError(`p2l: animation for "${action}" requires renderer "p2l"`)
+      }
+      if (!P2L_ANIMATION.test(file)) {
+        throw new CharacterPackError(`p2l: animation for "${action}" is malformed: ${file}`)
+      }
+      continue
     }
     if (file.startsWith('sprite:')) {
       const sheet = file.slice(7)

@@ -43,9 +43,8 @@ export const IpcChannel = {
   chatOpened: 'chat:opened',
 } as const
 
-/** Animation map of a character pack, as delivered to the renderer. */
 /** Renderer kind of a character pack. */
-export type RendererKind = 'video' | 'rig'
+export type RendererKind = 'video' | 'rig' | 'p2l'
 
 /** Animation map of a character pack, as delivered to the renderer. */
 export interface CharacterInfo {
@@ -57,6 +56,8 @@ export interface CharacterInfo {
   renderer: RendererKind
   /** rig.json pack-relative path when renderer is "rig". */
   rig?: string
+  /** .p2lrt model pack-relative path when renderer is "p2l" (ADR 0008). */
+  model?: string
 }
 
 /** Persisted application configuration (userData/config.json). */
